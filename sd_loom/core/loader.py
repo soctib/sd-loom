@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+import importlib
+import importlib.util
+import inspect
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from types import ModuleType
+
+    from sd_loom.core.protocol import PromptSpec
+
+
+def _is_file_path(name_or_path: str) -> bool:
+    """Return True if the argument looks like a file path rather than a bare module name."""
+    return "/" in name_or_path or "\\" in name_or_path or name_or_path.endswith(".py")
+
+
+def _load_module_from_file(path: str, prefix: str) -> ModuleType:
+    """Dynamically import a Python file as a module."""
+    file_path = Path(path).resolve()
+    if not file_path.exists():
+        raise FileNotFoundError(f"Module not found: {file_path}")
+
+    module_name = f"{prefix}.{file_path.stem}"
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module from {file_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_builtin_module(package: str, name: str) -> ModuleType:
+    """Import a built-in module from the given package."""
+    module_name = f"{package}.{name}"
+    return importlib.import_module(module_name)
+
+
+def _find_prompt_class(module: ModuleType, name_or_path: str) -> type[Any]:
+    """Find the single Prompt subclass defined in a module."""
+    from sd_loom.core.types import Prompt
+
+    candidates = [
+        obj
+        for _, obj in inspect.getmembers(module, inspect.isclass)
+        if issubclass(obj, Prompt) and obj.__module__ == module.__name__
+    ]
+
+    if not candidates:
+        raise AttributeError(
+            f"Prompt module '{name_or_path}' must define a Prompt subclass"
+        )
+    if len(candidates) > 1:
+        names = ", ".join(c.__name__ for c in candidates)
+        raise AttributeError(
+            f"Prompt module '{name_or_path}' has multiple Prompt subclasses ({names});"
+            " it must define exactly one"
+        )
+
+    return candidates[0]
+
+
+def load_prompt(name_or_path: str) -> PromptSpec:
+    """Load a prompt module by name (built-in) or file path (user-contributed).
+
+    The module must define exactly one ``Prompt`` subclass. The loader
+    finds it automatically and instantiates it.
+    """
+    if _is_file_path(name_or_path):
+        module = _load_module_from_file(name_or_path, "sd_loom.user_prompts")
+    else:
+        module = _load_builtin_module("sd_loom.prompts", name_or_path)
+
+    cls = _find_prompt_class(module, name_or_path)
+    result: PromptSpec = cls()
+    return result
+
+
+def load_workflow(name_or_path: str) -> Any:
+    """Load a workflow module by name (built-in) or file path (user-contributed).
+
+    The module must export a ``run`` callable.
+    """
+    if _is_file_path(name_or_path):
+        module = _load_module_from_file(name_or_path, "sd_loom.user_workflows")
+    else:
+        module = _load_builtin_module("sd_loom.workflows", name_or_path)
+
+    if not hasattr(module, "run"):
+        raise AttributeError(
+            f"Workflow module '{name_or_path}' must export a 'run' function"
+        )
+
+    return module

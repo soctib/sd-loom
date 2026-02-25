@@ -36,9 +36,7 @@ def run(spec: PromptSpec) -> GenerationResult:
         str(model_path),
         torch_dtype=torch.float16,
     )
-    pipe.enable_model_cpu_offload()
-    pipe.vae.config.force_upcast = False
-    pipe.enable_vae_tiling()
+    _apply_vram_profile(pipe, spec.vram)
 
     pipe.scheduler = _make_scheduler(spec.scheduler, pipe.scheduler.config)
 
@@ -73,6 +71,30 @@ def run(spec: PromptSpec) -> GenerationResult:
         elapsed_seconds=elapsed,
         workflow=workflow_name,
     )
+
+
+VRAM_PROFILES = ("low", "medium", "high")
+
+
+def _apply_vram_profile(pipe: Any, profile: str) -> None:
+    """Configure pipeline memory optimizations based on VRAM profile."""
+    if profile not in VRAM_PROFILES:
+        available = ", ".join(VRAM_PROFILES)
+        raise ValueError(f"Unknown VRAM profile '{profile}'. Available: {available}")
+
+    if profile == "low":
+        # ~8GB: CPU offload + VAE tiling + fp16 VAE
+        pipe.enable_model_cpu_offload()
+        pipe.vae.config.force_upcast = False
+        pipe.enable_vae_tiling()
+    elif profile == "medium":
+        # ~12GB: model on GPU, VAE tiling, fp16 VAE (no CPU offload — faster)
+        pipe.to("cuda")
+        pipe.vae.config.force_upcast = False
+        pipe.enable_vae_tiling()
+    else:
+        # high (~16GB+): everything on GPU, no tiling, allow VAE upcast
+        pipe.to("cuda")
 
 
 def _make_scheduler(name: str, config: dict[str, Any]) -> Any:

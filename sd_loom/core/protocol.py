@@ -19,6 +19,7 @@ class PromptSpec(Protocol):
     cfg_scale: float
     seed: int
     scheduler: str
+    vram: str
     output_dir: str | Path
 
 

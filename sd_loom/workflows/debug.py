@@ -22,6 +22,7 @@ def run(spec: PromptSpec) -> GenerationResult:
     click.echo(f"  cfg_scale:       {spec.cfg_scale}")
     click.echo(f"  seed:            {spec.seed}")
     click.echo(f"  scheduler:       {spec.scheduler}")
+    click.echo(f"  vram:            {spec.vram}")
     click.echo(f"  output_dir:      {spec.output_dir}")
 
     output_path = Path(str(spec.output_dir)) / "placeholder.png"

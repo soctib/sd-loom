@@ -14,4 +14,5 @@ class DefaultPrompt(Prompt):
     cfg_scale: float = 7.0
     seed: int = -1
     scheduler: str = "euler"
+    vram: str = "low"
     output_dir: str | Path = "outputs"

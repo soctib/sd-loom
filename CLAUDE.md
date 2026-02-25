@@ -34,4 +34,12 @@ Built-in workflows. Each module exports a `run(spec: PromptSpec) -> GenerationRe
 ```
 loom run sdxl prompts/example.py       # user prompt, sdxl workflow
 loom run debug prompts/example.py      # debug workflow
+loom info outputs/sdxl/example_*.png   # show embedded metadata
 ```
+
+## Issue Tracking
+Issues live in `./issues/` as markdown files. Naming convention:
+```
+{number}_{status}_{slug}.md
+```
+Statuses: `done`, `ready`, `blocked`, `design`, `future`

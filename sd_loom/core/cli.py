@@ -17,11 +17,9 @@ def main() -> None:
 
 
 @main.command()
+@click.argument("workflow_name")
 @click.argument("prompt_name")
-@click.option(
-    "--workflow", "workflow_name", default="debug", help="Workflow module name or path"
-)
-def run(prompt_name: str, workflow_name: str) -> None:
+def run(workflow_name: str, prompt_name: str) -> None:
     """Run a generation workflow with the given prompt spec."""
     spec: PromptSpec = load_prompt(prompt_name)
     workflow_mod = load_workflow(workflow_name)

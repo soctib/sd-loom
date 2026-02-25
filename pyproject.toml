@@ -14,6 +14,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ml = [
+    "torch",
+    "diffusers",
+    "transformers",
+    "accelerate",
+    "safetensors",
+]
 dev = [
     "mypy>=1.11",
     "ruff>=0.6",
@@ -28,6 +35,21 @@ include = ["sd_loom*"]
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "torch",
+    "torch.*",
+    "diffusers",
+    "diffusers.*",
+    "transformers",
+    "transformers.*",
+    "accelerate",
+    "accelerate.*",
+    "safetensors",
+    "safetensors.*",
+]
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py312"

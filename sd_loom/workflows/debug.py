@@ -16,7 +16,7 @@ def run(spec: PromptSpec) -> GenerationResult:
     click.echo("--- debug ---")
     click.echo(f"  prompt:          {spec.prompt!r}")
     click.echo(f"  negative_prompt: {spec.negative_prompt!r}")
-    click.echo(f"  model_path:      {spec.model_path!r}")
+    click.echo(f"  model:           {spec.model!r}")
     click.echo(f"  size:            {spec.width}x{spec.height}")
     click.echo(f"  steps:           {spec.steps}")
     click.echo(f"  cfg_scale:       {spec.cfg_scale}")

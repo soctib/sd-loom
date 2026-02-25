@@ -10,7 +10,7 @@ from pydantic import BaseModel
 class Prompt(BaseModel):
     prompt: str
     negative_prompt: str
-    model_path: str
+    model: str
     width: int
     height: int
     steps: int

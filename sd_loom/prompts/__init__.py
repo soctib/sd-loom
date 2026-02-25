@@ -7,7 +7,7 @@ from sd_loom.core.types import Prompt
 
 class DefaultPrompt(Prompt):
     negative_prompt: str = ""
-    model_path: str = ""
+    model: str = ""
     width: int = 1024
     height: int = 1024
     steps: int = 30

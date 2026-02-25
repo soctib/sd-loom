@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class PromptSpec(Protocol):
     prompt: str
     negative_prompt: str
-    model_path: str
+    model: str
     width: int
     height: int
     steps: int

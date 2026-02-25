@@ -10,13 +10,13 @@ Most SD frontends bury settings in JSON files or drag-and-drop UIs that are hard
 
 ```bash
 pip install -e ".[dev]"
-loom run prompts/example.py
+loom run sdxl prompts/example.py
 ```
 
 Specify a different workflow:
 
 ```bash
-loom run prompts/example.py --workflow custom_workflow
+loom run debug prompts/example.py
 ```
 
 ## Status

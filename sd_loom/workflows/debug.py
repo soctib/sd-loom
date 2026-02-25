@@ -30,4 +30,5 @@ def run(spec: PromptSpec) -> GenerationResult:
         image_path=output_path,
         seed=spec.seed,
         elapsed_seconds=0.0,
+        workflow=__name__.split(".")[-1],
     )

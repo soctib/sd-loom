@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import random
 import time
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import click
@@ -16,6 +14,7 @@ from diffusers import (
 )
 
 from sd_loom.core.resolve import resolve_model
+from sd_loom.core.save import save_image
 from sd_loom.core.types import GenerationResult
 
 if TYPE_CHECKING:
@@ -63,12 +62,8 @@ def run(spec: PromptSpec) -> GenerationResult:
     )
     elapsed = time.perf_counter() - t0
 
-    output_dir = Path(str(spec.output_dir))
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    image_path = output_dir / f"{timestamp}_{seed}.png"
-    result.images[0].save(image_path)
+    workflow_name = __name__.split(".")[-1]
+    image_path = save_image(result.images[0], spec, workflow_name, seed, elapsed)
 
     click.echo(f"Saved: {image_path} ({elapsed:.1f}s)")
 
@@ -76,6 +71,7 @@ def run(spec: PromptSpec) -> GenerationResult:
         image_path=image_path,
         seed=seed,
         elapsed_seconds=elapsed,
+        workflow=workflow_name,
     )
 
 

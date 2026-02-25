@@ -32,6 +32,6 @@ Built-in workflows. Each module exports a `run(spec: PromptSpec) -> GenerationRe
 
 ## CLI
 ```
-loom run prompts/example.py                        # user prompt, default workflow
-loom run prompts/example.py --workflow debug           # explicit workflow
+loom run sdxl prompts/example.py       # user prompt, sdxl workflow
+loom run debug prompts/example.py      # debug workflow
 ```

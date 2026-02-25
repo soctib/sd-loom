@@ -25,4 +25,5 @@ class GenerationResult:
     image_path: Path
     seed: int
     elapsed_seconds: float
+    workflow: str
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))

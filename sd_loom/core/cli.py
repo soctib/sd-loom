@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import click
@@ -28,3 +30,17 @@ def run(workflow_name: str, prompt_name: str) -> None:
     result: GenerationResult = run_fn(spec)
 
     click.echo(f"Done: {result.image_path} (seed={result.seed}, {result.elapsed_seconds:.1f}s)")
+
+
+@main.command()
+@click.argument("image_path", type=click.Path(exists=True, path_type=Path))
+def info(image_path: Path) -> None:
+    """Show embedded generation metadata from a PNG image."""
+    from sd_loom.core.metadata import read_png_metadata
+
+    try:
+        data = read_png_metadata(image_path)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    click.echo(json.dumps(data, indent=2))

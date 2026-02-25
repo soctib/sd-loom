@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
-def resolve_model(name: str) -> Path:
-    """Find a model file in ``models/`` whose stem matches *name*.
+def _normalize(name: str) -> str:
+    """Strip non-alphanumeric characters and lowercase for fuzzy comparison."""
+    return re.sub(r"[^a-z0-9]", "", name.lower())
 
-    Searches recursively from the current working directory's ``models/``
-    folder.  Raises ``FileNotFoundError`` if nothing matches and ``ValueError``
-    if the name is ambiguous (multiple files with the same stem).
+
+def resolve_model(name: str) -> Path:
+    """Find a model file in ``models/`` matching *name*.
+
+    Tries exact stem match first, then falls back to fuzzy matching
+    (case-insensitive, ignoring non-alphanumeric characters, partial match).
+    Raises ``FileNotFoundError`` if nothing matches and ``ValueError``
+    if the name is ambiguous (multiple fuzzy matches).
     """
     models_dir = Path.cwd() / "models"
     if not models_dir.is_dir():
@@ -17,16 +24,30 @@ def resolve_model(name: str) -> Path:
             "Create a 'models/' folder and place your checkpoints inside it."
         )
 
-    matches = [p for p in models_dir.rglob("*") if p.is_file() and p.stem == name]
+    all_files = [p for p in models_dir.rglob("*") if p.is_file()]
 
-    if not matches:
-        raise FileNotFoundError(
-            f"No model file with stem '{name}' found in {models_dir}"
-        )
-    if len(matches) > 1:
-        paths = "\n  ".join(str(p) for p in matches)
+    # Exact stem match
+    exact = [p for p in all_files if p.stem == name]
+    if len(exact) == 1:
+        return exact[0].resolve()
+    if len(exact) > 1:
+        paths = "\n  ".join(str(p) for p in exact)
         raise ValueError(
-            f"Ambiguous model name '{name}' — multiple matches:\n  {paths}"
+            f"Ambiguous model name '{name}' — multiple exact matches:\n  {paths}"
         )
 
-    return matches[0].resolve()
+    # Fuzzy match: normalized name must appear in normalized stem
+    query = _normalize(name)
+    fuzzy = [p for p in all_files if query in _normalize(p.stem)]
+
+    if not fuzzy:
+        raise FileNotFoundError(
+            f"No model matching '{name}' found in {models_dir}"
+        )
+    if len(fuzzy) > 1:
+        paths = "\n  ".join(str(p) for p in fuzzy)
+        raise ValueError(
+            f"Ambiguous model name '{name}' — multiple fuzzy matches:\n  {paths}"
+        )
+
+    return fuzzy[0].resolve()

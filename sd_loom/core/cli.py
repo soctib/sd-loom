@@ -21,9 +21,11 @@ def main() -> None:
 @main.command()
 @click.argument("workflow_name")
 @click.argument("prompt_name")
-def run(workflow_name: str, prompt_name: str) -> None:
+@click.option("-s", "--set", "overrides", multiple=True,
+              help="Override a prompt field: --set key=value")
+def run(workflow_name: str, prompt_name: str, overrides: tuple[str, ...]) -> None:
     """Run a generation workflow with the given prompt spec."""
-    spec: PromptSpec = load_prompt(prompt_name)
+    spec: PromptSpec = load_prompt(prompt_name, overrides=overrides)
     workflow_mod = load_workflow(workflow_name)
 
     run_fn: Any = workflow_mod.run

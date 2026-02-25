@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import click
+
 if TYPE_CHECKING:
     from types import ModuleType
 
@@ -65,7 +67,24 @@ def _find_prompt_class(module: ModuleType, name_or_path: str) -> type[Any]:
     return candidates[0]
 
 
-def load_prompt(name_or_path: str) -> PromptSpec:
+def _parse_overrides(overrides: tuple[str, ...]) -> dict[str, str]:
+    """Parse ``key=value`` pairs into a dict."""
+    result: dict[str, str] = {}
+    for item in overrides:
+        if "=" not in item:
+            raise click.BadParameter(
+                f"Override must be key=value, got: {item!r}", param_hint="'--set'"
+            )
+        key, value = item.split("=", 1)
+        result[key] = value
+    return result
+
+
+def load_prompt(
+    name_or_path: str,
+    *,
+    overrides: tuple[str, ...] = (),
+) -> PromptSpec:
     """Load a prompt module by name (built-in) or file path (user-contributed).
 
     The module must define exactly one ``Prompt`` subclass. The loader
@@ -77,8 +96,17 @@ def load_prompt(name_or_path: str) -> PromptSpec:
         module = _load_builtin_module("sd_loom.prompts", name_or_path)
 
     cls = _find_prompt_class(module, name_or_path)
-    result: PromptSpec = cls()
-    return result
+    instance: PromptSpec = cls()
+
+    if overrides:
+        from pydantic import BaseModel
+
+        if not isinstance(instance, BaseModel):
+            raise TypeError("Prompt spec must be a Pydantic BaseModel")
+        parsed = _parse_overrides(overrides)
+        instance = type(instance).model_validate({**instance.model_dump(), **parsed})
+
+    return instance
 
 
 def load_workflow(name_or_path: str) -> Any:

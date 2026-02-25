@@ -23,15 +23,28 @@ def main() -> None:
 @click.argument("prompt_name")
 @click.option("-s", "--set", "overrides", multiple=True,
               help="Override a prompt field: --set key=value")
-def run(workflow_name: str, prompt_name: str, overrides: tuple[str, ...]) -> None:
+@click.option("-n", "--count", type=int, default=None,
+              help="Number of images to generate (shorthand for --set count=N)")
+def run(workflow_name: str, prompt_name: str, overrides: tuple[str, ...],
+        count: int | None) -> None:
     """Run a generation workflow with the given prompt spec."""
-    spec: PromptSpec = load_prompt(prompt_name, overrides=overrides)
+    all_overrides = list(overrides)
+    if count is not None:
+        all_overrides.append(f"count={count}")
+    spec: PromptSpec = load_prompt(prompt_name, overrides=tuple(all_overrides))
     workflow_mod = load_workflow(workflow_name)
 
     run_fn: Any = workflow_mod.run
-    result: GenerationResult = run_fn(spec)
+    results: list[GenerationResult] = run_fn(spec)
 
-    click.echo(f"Done: {result.image_path} (seed={result.seed}, {result.elapsed_seconds:.1f}s)")
+    if len(results) == 1:
+        r = results[0]
+        click.echo(f"Done: {r.image_path} (seed={r.seed}, {r.elapsed_seconds:.1f}s)")
+    else:
+        for r in results:
+            click.echo(f"Saved: {r.image_path} (seed={r.seed}, {r.elapsed_seconds:.1f}s)")
+        total = sum(r.elapsed_seconds for r in results)
+        click.echo(f"Done: {len(results)} images in {total:.1f}s")
 
 
 @main.command()

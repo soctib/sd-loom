@@ -13,6 +13,7 @@ class DefaultPrompt(Prompt):
     steps: int = 30
     cfg_scale: float = 7.0
     seed: int = -1
+    count: int = 1
     scheduler: str = "euler"
     vram: str = "low"
     output_dir: str | Path = "outputs"

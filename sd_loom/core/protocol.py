@@ -18,6 +18,7 @@ class PromptSpec(Protocol):
     steps: int
     cfg_scale: float
     seed: int
+    count: int
     scheduler: str
     vram: str
     output_dir: str | Path
@@ -25,4 +26,4 @@ class PromptSpec(Protocol):
 
 @runtime_checkable
 class Workflow(Protocol):
-    def run(self, spec: PromptSpec) -> GenerationResult: ...
+    def run(self, spec: PromptSpec) -> list[GenerationResult]: ...

@@ -16,6 +16,7 @@ class Prompt(BaseModel):
     steps: int
     cfg_scale: float
     seed: int
+    count: int
     scheduler: str
     vram: str
     output_dir: str | Path

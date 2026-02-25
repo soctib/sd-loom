@@ -27,8 +27,11 @@ SCHEDULERS: dict[str, tuple[type[Any], dict[str, Any]]] = {
     "dpm++_2m_karras": (DPMSolverMultistepScheduler, {"use_karras_sigmas": True}),
 }
 
-def run(spec: PromptSpec) -> GenerationResult:
-    """SDXL txt2img workflow."""
+VRAM_BATCH_SIZE: dict[str, int] = {"low": 1, "medium": 2, "high": 4}
+
+
+def run(spec: PromptSpec) -> list[GenerationResult]:
+    """SDXL txt2img workflow with VRAM-aware batching."""
     model_path = resolve_model(spec.model)
     click.echo(f"Loading {model_path.name} ...")
 
@@ -40,37 +43,49 @@ def run(spec: PromptSpec) -> GenerationResult:
 
     pipe.scheduler = _make_scheduler(spec.scheduler, pipe.scheduler.config)
 
-    seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
-    generator = torch.Generator(device="cpu").manual_seed(seed)
-
-    click.echo(
-        f"Generating {spec.width}x{spec.height}, {spec.steps} steps, "
-        f"cfg {spec.cfg_scale}, seed {seed}, scheduler {spec.scheduler}"
-    )
-
-    t0 = time.perf_counter()
-    result: Any = pipe(
-        prompt=spec.prompt,
-        negative_prompt=spec.negative_prompt or None,
-        width=spec.width,
-        height=spec.height,
-        num_inference_steps=spec.steps,
-        guidance_scale=spec.cfg_scale,
-        generator=generator,
-    )
-    elapsed = time.perf_counter() - t0
-
+    base_seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
+    seeds = [base_seed + i for i in range(spec.count)]
+    max_batch = VRAM_BATCH_SIZE.get(spec.vram, 1)
     workflow_name = __name__.split(".")[-1]
-    image_path = save_image(result.images[0], spec, workflow_name, seed, elapsed)
+    results: list[GenerationResult] = []
 
-    click.echo(f"Saved: {image_path} ({elapsed:.1f}s)")
+    for chunk_start in range(0, len(seeds), max_batch):
+        chunk_seeds = seeds[chunk_start : chunk_start + max_batch]
+        generators = [
+            torch.Generator(device="cpu").manual_seed(s) for s in chunk_seeds
+        ]
 
-    return GenerationResult(
-        image_path=image_path,
-        seed=seed,
-        elapsed_seconds=elapsed,
-        workflow=workflow_name,
-    )
+        click.echo(
+            f"Generating {spec.width}x{spec.height}, {spec.steps} steps, "
+            f"cfg {spec.cfg_scale}, seeds {chunk_seeds}, scheduler {spec.scheduler}"
+        )
+
+        t0 = time.perf_counter()
+        pipe_result: Any = pipe(
+            prompt=spec.prompt,
+            negative_prompt=spec.negative_prompt or None,
+            width=spec.width,
+            height=spec.height,
+            num_inference_steps=spec.steps,
+            guidance_scale=spec.cfg_scale,
+            num_images_per_prompt=len(chunk_seeds),
+            generator=generators,
+        )
+        elapsed = time.perf_counter() - t0
+
+        for i, seed in enumerate(chunk_seeds):
+            image_path = save_image(
+                pipe_result.images[i], spec, workflow_name, seed, elapsed,
+            )
+            click.echo(f"Saved: {image_path} (seed={seed}, {elapsed:.1f}s)")
+            results.append(GenerationResult(
+                image_path=image_path,
+                seed=seed,
+                elapsed_seconds=elapsed,
+                workflow=workflow_name,
+            ))
+
+    return results
 
 
 VRAM_PROFILES = ("low", "medium", "high")

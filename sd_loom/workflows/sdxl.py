@@ -18,7 +18,7 @@ from sd_loom.core.save import save_image
 from sd_loom.core.types import GenerationResult
 
 if TYPE_CHECKING:
-    from sd_loom.core.protocol import PromptSpec
+    from sd_loom.core.protocol import SpecProtocol
 
 SCHEDULERS: dict[str, tuple[type[Any], dict[str, Any]]] = {
     "euler": (EulerDiscreteScheduler, {}),
@@ -30,7 +30,7 @@ SCHEDULERS: dict[str, tuple[type[Any], dict[str, Any]]] = {
 VRAM_BATCH_SIZE: dict[str, int] = {"low": 1, "medium": 2, "high": 4}
 
 
-def run(spec: PromptSpec) -> list[GenerationResult]:
+def run(spec: SpecProtocol) -> list[GenerationResult]:
     """SDXL txt2img workflow with VRAM-aware batching."""
     model_path = resolve_model(spec.model)
     click.echo(f"Loading {model_path.name} ...")

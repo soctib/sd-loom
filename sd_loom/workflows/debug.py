@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING
 import click
 
 if TYPE_CHECKING:
-    from sd_loom.core.protocol import PromptSpec
+    from sd_loom.core.protocol import SpecProtocol
 
 from sd_loom.core.types import GenerationResult
 
 
-def run(spec: PromptSpec) -> list[GenerationResult]:
+def run(spec: SpecProtocol) -> list[GenerationResult]:
     """Debug workflow. Prints all spec fields and returns placeholder results."""
     click.echo("--- debug ---")
     click.echo(f"  prompt:          {spec.prompt!r}")

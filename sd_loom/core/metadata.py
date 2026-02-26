@@ -8,11 +8,11 @@ from PIL.PngImagePlugin import PngInfo
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from sd_loom.core.protocol import PromptSpec
+    from sd_loom.core.protocol import SpecProtocol
 
 
 def build_png_metadata(
-    spec: PromptSpec,
+    spec: SpecProtocol,
     workflow_name: str,
     seed: int,
     elapsed: float,

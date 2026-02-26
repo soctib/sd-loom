@@ -12,7 +12,7 @@ import click
 if TYPE_CHECKING:
     from types import ModuleType
 
-    from sd_loom.core.protocol import PromptSpec
+    from sd_loom.core.protocol import SpecProtocol
 
 
 def _is_file_path(name_or_path: str) -> bool:
@@ -43,24 +43,24 @@ def _load_builtin_module(package: str, name: str) -> ModuleType:
     return importlib.import_module(module_name)
 
 
-def _find_prompt_class(module: ModuleType, name_or_path: str) -> type[Any]:
-    """Find the single Prompt subclass defined in a module."""
-    from sd_loom.core.types import Prompt
+def _find_spec_class(module: ModuleType, name_or_path: str) -> type[Any]:
+    """Find the single LoomSpec subclass defined in a module."""
+    from sd_loom.core.types import LoomSpec
 
     candidates = [
         obj
         for _, obj in inspect.getmembers(module, inspect.isclass)
-        if issubclass(obj, Prompt) and obj.__module__ == module.__name__
+        if issubclass(obj, LoomSpec) and obj.__module__ == module.__name__
     ]
 
     if not candidates:
         raise AttributeError(
-            f"Prompt module '{name_or_path}' must define a Prompt subclass"
+            f"Spec module '{name_or_path}' must define a LoomSpec subclass"
         )
     if len(candidates) > 1:
         names = ", ".join(c.__name__ for c in candidates)
         raise AttributeError(
-            f"Prompt module '{name_or_path}' has multiple Prompt subclasses ({names});"
+            f"Spec module '{name_or_path}' has multiple LoomSpec subclasses ({names});"
             " it must define exactly one"
         )
 
@@ -80,29 +80,29 @@ def _parse_overrides(overrides: tuple[str, ...]) -> dict[str, str]:
     return result
 
 
-def load_prompt(
+def load_spec(
     name_or_path: str,
     *,
     overrides: tuple[str, ...] = (),
-) -> PromptSpec:
-    """Load a prompt module by name (built-in) or file path (user-contributed).
+) -> SpecProtocol:
+    """Load a spec module by name (built-in) or file path (user-contributed).
 
-    The module must define exactly one ``Prompt`` subclass. The loader
+    The module must define exactly one ``LoomSpec`` subclass. The loader
     finds it automatically and instantiates it.
     """
     if _is_file_path(name_or_path):
-        module = _load_module_from_file(name_or_path, "sd_loom.user_prompts")
+        module = _load_module_from_file(name_or_path, "sd_loom.user_specs")
     else:
-        module = _load_builtin_module("sd_loom.prompts", name_or_path)
+        module = _load_builtin_module("sd_loom.specs", name_or_path)
 
-    cls = _find_prompt_class(module, name_or_path)
-    instance: PromptSpec = cls()
+    cls = _find_spec_class(module, name_or_path)
+    instance: SpecProtocol = cls()
 
     if overrides:
         from pydantic import BaseModel
 
         if not isinstance(instance, BaseModel):
-            raise TypeError("Prompt spec must be a Pydantic BaseModel")
+            raise TypeError("Spec must be a Pydantic BaseModel")
         parsed = _parse_overrides(overrides)
         instance = type(instance).model_validate({**instance.model_dump(), **parsed})
 

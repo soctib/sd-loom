@@ -9,12 +9,12 @@ from sd_loom.core.metadata import build_png_metadata
 if TYPE_CHECKING:
     from PIL import Image
 
-    from sd_loom.core.protocol import PromptSpec
+    from sd_loom.core.protocol import SpecProtocol
 
 
 def save_image(
     image: Image.Image,
-    spec: PromptSpec,
+    spec: SpecProtocol,
     workflow_name: str,
     seed: int,
     elapsed: float,

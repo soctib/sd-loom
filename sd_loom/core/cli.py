@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from sd_loom.core.loader import load_prompt, load_workflow
+from sd_loom.core.loader import load_spec, load_workflow
 
 if TYPE_CHECKING:
-    from sd_loom.core.protocol import PromptSpec
+    from sd_loom.core.protocol import SpecProtocol
     from sd_loom.core.types import GenerationResult
 
 
@@ -31,7 +31,7 @@ def run(workflow_name: str, prompt_name: str, overrides: tuple[str, ...],
     all_overrides = list(overrides)
     if count is not None:
         all_overrides.append(f"count={count}")
-    spec: PromptSpec = load_prompt(prompt_name, overrides=tuple(all_overrides))
+    spec: SpecProtocol = load_spec(prompt_name, overrides=tuple(all_overrides))
     workflow_mod = load_workflow(workflow_name)
 
     run_fn: Any = workflow_mod.run

@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 @runtime_checkable
-class PromptSpec(Protocol):
+class SpecProtocol(Protocol):
     prompt: str
     negative_prompt: str
     model: str
@@ -26,4 +26,4 @@ class PromptSpec(Protocol):
 
 @runtime_checkable
 class Workflow(Protocol):
-    def run(self, spec: PromptSpec) -> list[GenerationResult]: ...
+    def run(self, spec: SpecProtocol) -> list[GenerationResult]: ...

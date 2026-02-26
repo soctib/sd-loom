@@ -7,7 +7,7 @@ from pathlib import Path  # noqa: TC003 — Pydantic needs this at runtime
 from pydantic import BaseModel
 
 
-class Prompt(BaseModel):
+class LoomSpec(BaseModel):
     prompt: str
     negative_prompt: str
     model: str

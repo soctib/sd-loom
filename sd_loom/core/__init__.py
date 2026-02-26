@@ -1,4 +1,4 @@
-from sd_loom.core.protocol import PromptSpec, Workflow
-from sd_loom.core.types import GenerationResult, Prompt
+from sd_loom.core.protocol import SpecProtocol, Workflow
+from sd_loom.core.types import GenerationResult, LoomSpec
 
-__all__ = ["GenerationResult", "Prompt", "PromptSpec", "Workflow"]
+__all__ = ["GenerationResult", "LoomSpec", "SpecProtocol", "Workflow"]

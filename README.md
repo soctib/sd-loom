@@ -69,20 +69,20 @@ Models are resolved by fuzzy match against your local `.safetensors` files — c
 loom run sdxl prompts/example.py --set model=illustrious
 ```
 
-## Prompts
+## Specs
 
-Prompts are Python modules that define a subclass of `DefaultPrompt`:
+Specs are Python modules that define a subclass of `DefaultSpec`:
 
 ```python
-from sd_loom.prompts import DefaultPrompt
+from sd_loom.specs import DefaultSpec
 
-class MyPrompt(DefaultPrompt):
+class MySpec(DefaultSpec):
     prompt = "a photo of a cat"
     negative_prompt = "blurry, low quality"
     model = "illustriousRealismBy_v10VAE"
 ```
 
-`DefaultPrompt` provides sensible defaults for everything except `prompt`. See `prompts/example.py` for a starting point.
+`DefaultSpec` provides sensible defaults for everything except `prompt`. See `prompts/example.py` for a starting point.
 
 ## Status
 

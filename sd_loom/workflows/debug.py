@@ -14,8 +14,8 @@ from sd_loom.core.types import GenerationResult
 def run(spec: SpecProtocol) -> list[GenerationResult]:
     """Debug workflow. Prints all spec fields and returns placeholder results."""
     click.echo("--- debug ---")
-    click.echo(f"  prompt:          {spec.prompt!r}")
-    click.echo(f"  negative_prompt: {spec.negative_prompt!r}")
+    click.echo(f"  prompt:          {spec.prompt.positive!r}")
+    click.echo(f"  negative:        {spec.prompt.negative!r}")
     click.echo(f"  model:           {spec.model!r}")
     click.echo(f"  size:            {spec.width}x{spec.height}")
     click.echo(f"  steps:           {spec.steps}")

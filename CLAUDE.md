@@ -6,7 +6,7 @@ Everything is Python — no JSON configs, no GUI. Users define specs and workflo
 
 ### `sd_loom/core/`
 - **protocol.py** — `SpecProtocol` and `Workflow` Protocols (the contracts)
-- **types.py** — `LoomSpec` (Pydantic BaseModel, all fields required), `GenerationResult` (dataclass)
+- **types.py** — `Prompt` (positive + negative text), `LoomSpec` (Pydantic BaseModel, all fields required), `GenerationResult` (dataclass)
 - **loader.py** — Dual-mode loader for specs and workflows. Bare names resolve to built-ins (`sd_loom.specs.*`, `sd_loom.workflows.*`); file paths are loaded dynamically.
 - **cli.py** — Click CLI. Entry point: `loom run WORKFLOW PROMPT`
 
@@ -16,6 +16,9 @@ Built-in specs. Each module defines a single `LoomSpec` subclass; the loader fin
 
 ### `prompts/` (project root)
 User-contributed specs. Not part of the package. `example.py` is a starting point.
+
+### `sd_loom/styles/`
+Built-in prompt styles. Each style is a callable `_Style` instance that takes a subject string and returns a `Prompt`. SAI presets (17), Fooocus (4), photography genres (7), art styles (9), model-specific quality boosters (3) — 40 styles total.
 
 ### `sd_loom/workflows/`
 Built-in workflows. Each module exports a `run(spec: SpecProtocol) -> GenerationResult` function. User-contributed workflows live anywhere on disk and are passed as file paths.

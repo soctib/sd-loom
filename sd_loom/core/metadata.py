@@ -49,11 +49,18 @@ def read_png_metadata(path: Path) -> dict[str, Any]:
 
 def _a1111_format(data: dict[str, Any]) -> str:
     """Build an A1111-compatible parameters string."""
-    lines: list[str] = [data.get("prompt", "")]
+    prompt_data = data.get("prompt", {})
+    if isinstance(prompt_data, dict):
+        positive = prompt_data.get("positive", "")
+        negative = prompt_data.get("negative", "")
+    else:
+        positive = str(prompt_data)
+        negative = ""
 
-    neg = data.get("negative_prompt", "")
-    if neg:
-        lines.append(f"Negative prompt: {neg}")
+    lines: list[str] = [positive]
+
+    if negative:
+        lines.append(f"Negative prompt: {negative}")
 
     params = (
         f"Steps: {data.get('steps')}, "

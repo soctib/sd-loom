@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path  # noqa: TC003 — Pydantic needs this at runtime
 
-from sd_loom.core.types import LoomSpec
+from sd_loom.core.types import LoomSpec, Prompt  # noqa: TC003
 
 
 class DefaultSpec(LoomSpec):
-    negative_prompt: str = ""
+    prompt: Prompt = Prompt(positive="")
     model: str = ""
     width: int = 1024
     height: int = 1024

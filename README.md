@@ -74,15 +74,38 @@ loom run sdxl prompts/example.py --set model=illustrious
 Specs are Python modules that define a subclass of `DefaultSpec`:
 
 ```python
+from sd_loom.core.types import Prompt
 from sd_loom.specs import DefaultSpec
 
 class MySpec(DefaultSpec):
-    prompt = "a photo of a cat"
-    negative_prompt = "blurry, low quality"
+    prompt = Prompt(positive="a photo of a cat", negative="blurry, low quality")
     model = "illustriousRealismBy_v10VAE"
 ```
 
 `DefaultSpec` provides sensible defaults for everything except `prompt`. See `prompts/example.py` for a starting point.
+
+## Styles
+
+Built-in styles wrap a subject string into a styled `Prompt` with curated positive/negative templates:
+
+```python
+from sd_loom.specs import DefaultSpec
+from sd_loom.styles import cinematic
+
+class MySpec(DefaultSpec):
+    prompt = cinematic("a photo of a cat")
+    model = "illustriousRealismBy_v10VAE"
+```
+
+Available styles:
+
+| Category | Styles |
+|----------|--------|
+| **SAI presets** | `enhance`, `cinematic`, `photographic`, `anime`, `digital_art`, `pixel_art`, `fantasy`, `three_d_model`, `analog_film`, `comic_book`, `craft_clay`, `isometric`, `line_art`, `low_poly`, `neon_punk`, `origami`, `texture` |
+| **Fooocus** | `fooocus_sharp`, `fooocus_masterpiece`, `fooocus_photograph`, `fooocus_cinematic` |
+| **Photography** | `portrait`, `landscape`, `street_photo`, `macro`, `fashion`, `food`, `product` |
+| **Art** | `oil_painting`, `watercolor`, `ink`, `art_nouveau`, `pop_art`, `gothic`, `steampunk`, `dark_fantasy`, `manga` |
+| **Model-specific** | `realistic` (RealVisXL etc.), `illustrious` (Illustrious XL), `pony` (Pony Diffusion) |
 
 ## Status
 

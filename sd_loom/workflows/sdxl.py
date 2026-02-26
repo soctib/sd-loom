@@ -62,8 +62,8 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
 
         t0 = time.perf_counter()
         pipe_result: Any = pipe(
-            prompt=spec.prompt,
-            negative_prompt=spec.negative_prompt or None,
+            prompt=spec.prompt.positive,
+            negative_prompt=spec.prompt.negative or None,
             width=spec.width,
             height=spec.height,
             num_inference_steps=spec.steps,

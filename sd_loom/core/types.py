@@ -4,12 +4,16 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003 — Pydantic needs this at runtime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+class Prompt(BaseModel):
+    positive: str
+    negative: str = ""
 
 
 class LoomSpec(BaseModel):
-    prompt: str
-    negative_prompt: str
+    prompt: Prompt
     model: str
     width: int
     height: int
@@ -20,6 +24,14 @@ class LoomSpec(BaseModel):
     scheduler: str
     vram: str
     output_dir: str | Path
+
+    @field_validator("prompt", mode="before")
+    @classmethod
+    def _coerce_prompt(cls, v: object) -> object:
+        """Allow plain strings: ``--set prompt='a cat'`` → ``Prompt(positive='a cat')``."""
+        if isinstance(v, str):
+            return Prompt(positive=v)
+        return v
 
 
 @dataclass

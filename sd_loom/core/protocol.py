@@ -5,13 +5,12 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from sd_loom.core.types import GenerationResult
+    from sd_loom.core.types import GenerationResult, Prompt
 
 
 @runtime_checkable
 class SpecProtocol(Protocol):
-    prompt: str
-    negative_prompt: str
+    prompt: Prompt
     model: str
     width: int
     height: int

@@ -161,6 +161,7 @@ def parse_a1111(text: str) -> dict[str, Any]:
     result: dict[str, Any] = {
         "prompt": {"positive": clean_positive, "negative": negative},
         "model": params.get("Model", ""),
+        "model_hash": params.get("Model hash", ""),
         "width": width,
         "height": height,
         "steps": int(params.get("Steps", "0")),
@@ -172,7 +173,7 @@ def parse_a1111(text: str) -> dict[str, Any]:
 
     # Include extra A1111 params we don't map but are useful to see
     known_keys = {"Steps", "Sampler", "CFG scale", "Seed", "Size", "Model",
-                  "Schedule type", "Negative prompt"}
+                  "Model hash", "Schedule type", "Negative prompt"}
     extras = {k: v for k, v in params.items() if k not in known_keys}
     if extras:
         result["a1111_extra"] = extras

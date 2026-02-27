@@ -17,7 +17,11 @@ if TYPE_CHECKING:
 
 def _is_file_path(name_or_path: str) -> bool:
     """Return True if the argument looks like a file path rather than a bare module name."""
-    return "/" in name_or_path or "\\" in name_or_path or name_or_path.endswith(".py")
+    return (
+        "/" in name_or_path
+        or "\\" in name_or_path
+        or name_or_path.endswith((".py", ".json"))
+    )
 
 
 def _load_module_from_file(path: str, prefix: str) -> ModuleType:
@@ -80,23 +84,39 @@ def _parse_overrides(overrides: tuple[str, ...]) -> dict[str, str]:
     return result
 
 
+def _load_json_spec(path: Path) -> SpecProtocol:
+    """Load a spec from a JSON file, filling missing fields from DefaultSpec."""
+    import json
+
+    from sd_loom.specs import DefaultSpec
+
+    data = json.loads(path.read_text())
+    instance: SpecProtocol = DefaultSpec.model_validate(data)
+    return instance
+
+
 def load_spec(
     name_or_path: str,
     *,
     overrides: tuple[str, ...] = (),
 ) -> SpecProtocol:
-    """Load a spec module by name (built-in) or file path (user-contributed).
+    """Load a spec by name (built-in), file path (.py), or JSON file (.json).
 
-    The module must define exactly one ``LoomSpec`` subclass. The loader
-    finds it automatically and instantiates it.
+    For .py files, the module must define exactly one ``LoomSpec`` subclass.
+    For .json files, missing fields are filled from ``DefaultSpec`` defaults.
     """
-    if _is_file_path(name_or_path):
+    file_path = Path(name_or_path)
+
+    if file_path.suffix == ".json":
+        instance = _load_json_spec(file_path.resolve())
+    elif _is_file_path(name_or_path):
         module = _load_module_from_file(name_or_path, "sd_loom.user_specs")
+        cls = _find_spec_class(module, name_or_path)
+        instance = cls()
     else:
         module = _load_builtin_module("sd_loom.specs", name_or_path)
-
-    cls = _find_spec_class(module, name_or_path)
-    instance: SpecProtocol = cls()
+        cls = _find_spec_class(module, name_or_path)
+        instance = cls()
 
     if overrides:
         from pydantic import BaseModel

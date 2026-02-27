@@ -13,6 +13,7 @@ from diffusers import (
     StableDiffusionXLPipeline,
 )
 
+from sd_loom.core.metadata import read_safetensors_metadata
 from sd_loom.core.resolve import resolve_lora, resolve_model, resolve_vae
 from sd_loom.core.save import save_image
 from sd_loom.core.types import GenerationResult
@@ -51,9 +52,17 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
         )
 
     # LoRA loading
+    clip_skip = spec.clip_skip
     if spec.loras:
-        for lora_name, weight in spec.loras:
-            lora_path = resolve_lora(lora_name)
+        resolved_loras = [
+            (name, resolve_lora(name), weight)
+            for name, weight in spec.loras
+        ]
+        clip_skip = _resolve_clip_skip(
+            [(name, path) for name, path, _ in resolved_loras],
+            spec.clip_skip,
+        )
+        for lora_name, lora_path, weight in resolved_loras:
             click.echo(f"Loading LoRA {lora_path.name} (weight={weight}) ...")
             pipe.load_lora_weights(str(lora_path), adapter_name=lora_name)
         names = [name for name, _ in spec.loras]
@@ -89,6 +98,7 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
             height=spec.height,
             num_inference_steps=spec.steps,
             guidance_scale=spec.cfg_scale,
+            clip_skip=clip_skip if clip_skip > 1 else None,
             num_images_per_prompt=len(chunk_seeds),
             generator=generators,
         )
@@ -107,6 +117,50 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
             ))
 
     return results
+
+
+def _resolve_clip_skip(
+    lora_paths: list[tuple[str, Any]], spec_clip_skip: int,
+) -> int:
+    """Determine clip_skip from LoRA metadata, auto-correcting if needed.
+
+    Returns the clip_skip value to use. Auto-corrects if all LoRAs agree
+    on a value different from the spec. Errors if LoRAs disagree with each other.
+    """
+    from pathlib import Path
+
+    lora_clip_skips: dict[str, int] = {}
+    for lora_name, lora_path in lora_paths:
+        path = Path(lora_path)
+        if path.suffix != ".safetensors":
+            continue
+        meta = read_safetensors_metadata(path).get("metadata", {})
+        val = meta.get("ss_clip_skip")
+        if val is None or val == "None":
+            continue
+        lora_clip_skips[lora_name] = int(val)
+
+    if not lora_clip_skips:
+        return spec_clip_skip
+
+    unique_values = set(lora_clip_skips.values())
+    if len(unique_values) > 1:
+        detail = ", ".join(f"{n}: clip_skip={v}" for n, v in lora_clip_skips.items())
+        raise ValueError(
+            f"LoRAs require conflicting clip_skip values ({detail}). "
+            f"These LoRAs may not be compatible with each other."
+        )
+
+    lora_clip_skip = unique_values.pop()
+    if lora_clip_skip != spec_clip_skip:
+        names = ", ".join(lora_clip_skips)
+        click.echo(
+            f"Auto-setting clip_skip={lora_clip_skip} "
+            f"(LoRA {names} trained with clip_skip={lora_clip_skip})"
+        )
+        return lora_clip_skip
+
+    return spec_clip_skip
 
 
 VRAM_PROFILES = ("low", "medium", "high")

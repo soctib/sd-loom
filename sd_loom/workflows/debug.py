@@ -23,6 +23,7 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
     click.echo(f"  seed:            {spec.seed}")
     click.echo(f"  count:           {spec.count}")
     click.echo(f"  scheduler:       {spec.scheduler}")
+    click.echo(f"  clip_skip:       {spec.clip_skip}")
     click.echo(f"  vae:             {spec.vae!r}")
     click.echo(f"  loras:           {spec.loras!r}")
     click.echo(f"  vram:            {spec.vram}")

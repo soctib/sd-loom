@@ -22,6 +22,7 @@ class LoomSpec(BaseModel):
     seed: int
     count: int
     scheduler: str
+    clip_skip: int
     vae: str
     loras: list[tuple[str, float]]
     vram: str

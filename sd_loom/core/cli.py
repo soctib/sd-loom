@@ -48,14 +48,23 @@ def run(workflow_name: str, prompt_name: str, overrides: tuple[str, ...],
 
 
 @main.command()
-@click.argument("image_path", type=click.Path(exists=True, path_type=Path))
-def info(image_path: Path) -> None:
-    """Show embedded generation metadata from a PNG image."""
-    from sd_loom.core.metadata import read_png_metadata
+@click.argument("file_path", type=click.Path(exists=True, path_type=Path))
+def info(file_path: Path) -> None:
+    """Show metadata from an image, safetensors file, or A1111 parameters text."""
+    if file_path.suffix == ".safetensors":
+        from sd_loom.core.metadata import read_safetensors_metadata
 
-    try:
-        data = read_png_metadata(image_path)
-    except ValueError as exc:
-        raise SystemExit(str(exc)) from exc
+        data = read_safetensors_metadata(file_path)
+    elif file_path.suffix == ".txt":
+        from sd_loom.core.metadata import parse_a1111
+
+        data = parse_a1111(file_path.read_text())
+    else:
+        from sd_loom.core.metadata import read_image_metadata
+
+        try:
+            data = read_image_metadata(file_path)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
 
     click.echo(json.dumps(data, indent=2))

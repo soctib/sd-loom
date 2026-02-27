@@ -8,11 +8,13 @@ Everything is Python — no JSON configs, no GUI. Users define specs and workflo
 - **protocol.py** — `SpecProtocol` and `Workflow` Protocols (the contracts)
 - **types.py** — `Prompt` (positive + negative text), `LoomSpec` (Pydantic BaseModel, all fields required), `GenerationResult` (dataclass)
 - **loader.py** — Dual-mode loader for specs and workflows. Bare names resolve to built-ins (`sd_loom.specs.*`, `sd_loom.workflows.*`); file paths are loaded dynamically.
+- **resolve.py** — `resolve_model()`, `resolve_vae()`, `resolve_lora()` — fuzzy file resolution by name against `models/`, `models/vae/`, `models/sdxl/lora/`
 - **cli.py** — Click CLI. Entry point: `loom run WORKFLOW PROMPT`
 
 ### `sd_loom/specs/`
 Built-in specs. Each module defines a single `LoomSpec` subclass; the loader finds and instantiates it automatically (class name doesn't matter). Extend `DefaultSpec` to inherit sensible defaults. User-contributed specs live anywhere on disk and are passed as file paths.
 - **`__init__.py`** — `DefaultSpec(LoomSpec)` (sensible defaults for everything except `prompt`; extend this)
+- Fields include `vae: str` (bare name, resolved in `models/vae/`) and `loras: list[tuple[str, float]]` (name/weight pairs, resolved in `models/sdxl/lora/`)
 
 ### `prompts/` (project root)
 User-contributed specs. Not part of the package. `example.py` is a starting point.

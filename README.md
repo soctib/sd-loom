@@ -84,6 +84,29 @@ class MySpec(DefaultSpec):
 
 `DefaultSpec` provides sensible defaults for everything except `prompt`. See `prompts/example.py` for a starting point.
 
+### VAE and LoRA
+
+Swap the VAE or apply LoRAs by adding fields to your spec:
+
+```python
+from sd_loom.specs import DefaultSpec
+from sd_loom.styles import cinematic
+
+class MySpec(DefaultSpec):
+    prompt = cinematic("a cat")
+    model = "illustrious"
+    vae = "p6_sdxl_vae"                  # resolved in models/vae/
+    loras = [("realism", 0.7)]           # resolved in models/sdxl/lora/
+```
+
+Or override from the CLI:
+
+```bash
+loom run sdxl prompts/example.py --set vae=p6_sdxl_vae
+```
+
+VAE names are resolved by fuzzy match against `models/vae/`. LoRA names are resolved against `models/sdxl/lora/`.
+
 ## Styles
 
 Built-in styles wrap a subject string into a styled `Prompt` with curated positive/negative templates:

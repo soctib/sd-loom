@@ -22,6 +22,8 @@ class LoomSpec(BaseModel):
     seed: int
     count: int
     scheduler: str
+    vae: str
+    loras: list[tuple[str, float]]
     vram: str
     output_dir: str | Path
 

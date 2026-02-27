@@ -15,5 +15,7 @@ class DefaultSpec(LoomSpec):
     seed: int = -1
     count: int = 1
     scheduler: str = "euler"
+    vae: str = ""
+    loras: list[tuple[str, float]] = []
     vram: str = "low"
     output_dir: str | Path = "outputs"

@@ -70,5 +70,14 @@ def _a1111_format(data: dict[str, Any]) -> str:
         f"Size: {data.get('width')}x{data.get('height')}, "
         f"Model: {data.get('model')}"
     )
+
+    vae = data.get("vae", "")
+    if vae:
+        params += f", VAE: {vae}"
+
+    loras: list[list[Any]] = data.get("loras", [])
+    for lora_name, weight in loras:
+        params += f", <lora:{lora_name}:{weight}>"
+
     lines.append(params)
     return "\n".join(lines)

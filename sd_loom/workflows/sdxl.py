@@ -13,7 +13,7 @@ from diffusers import (
     StableDiffusionXLPipeline,
 )
 
-from sd_loom.core.resolve import resolve_model
+from sd_loom.core.resolve import resolve_lora, resolve_model, resolve_vae
 from sd_loom.core.save import save_image
 from sd_loom.core.types import GenerationResult
 
@@ -39,6 +39,27 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
         str(model_path),
         torch_dtype=torch.float16,
     )
+
+    # VAE swap
+    if spec.vae:
+        from diffusers import AutoencoderKL
+
+        vae_path = resolve_vae(spec.vae)
+        click.echo(f"Loading VAE {vae_path.name} ...")
+        pipe.vae = AutoencoderKL.from_single_file(
+            str(vae_path), torch_dtype=torch.float16,
+        )
+
+    # LoRA loading
+    if spec.loras:
+        for lora_name, weight in spec.loras:
+            lora_path = resolve_lora(lora_name)
+            click.echo(f"Loading LoRA {lora_path.name} (weight={weight}) ...")
+            pipe.load_lora_weights(str(lora_path), adapter_name=lora_name)
+        names = [name for name, _ in spec.loras]
+        weights = [w for _, w in spec.loras]
+        pipe.set_adapters(names, adapter_weights=weights)
+
     _apply_vram_profile(pipe, spec.vram)
 
     pipe.scheduler = _make_scheduler(spec.scheduler, pipe.scheduler.config)

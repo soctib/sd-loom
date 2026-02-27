@@ -20,6 +20,7 @@ ml = [
     "transformers",
     "accelerate",
     "safetensors",
+    "peft",
 ]
 dev = [
     "mypy>=1.11",

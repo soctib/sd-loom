@@ -20,13 +20,15 @@ def save_image(
     elapsed: float,
 ) -> Path:
     """Save a generated image with structured path and embedded metadata."""
-    prompt_name: str = type(spec).__module__.split(".")[-1]
-    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    spec_name: str = type(spec).__module__.split(".")[-1]
+    now = datetime.now(UTC)
+    date_dir = now.strftime("%Y%m%d")
+    time_stamp = now.strftime("%H%M%S")
 
-    output_dir = Path(str(spec.output_dir)) / workflow_name
+    output_dir = Path(str(spec.output_dir)) / workflow_name / spec_name / date_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    image_path = output_dir / f"{prompt_name}_{timestamp}_{seed}.png"
+    image_path = output_dir / f"{time_stamp}_{seed}.png"
 
     # Cast away the protocol type so mypy sees .model_dump()
     pnginfo = build_png_metadata(spec, workflow_name, seed, elapsed)

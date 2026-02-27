@@ -23,18 +23,29 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
     click.echo(f"  seed:            {spec.seed}")
     click.echo(f"  count:           {spec.count}")
     click.echo(f"  scheduler:       {spec.scheduler}")
+    click.echo(f"  vae:             {spec.vae!r}")
+    click.echo(f"  loras:           {spec.loras!r}")
     click.echo(f"  vram:            {spec.vram}")
     click.echo(f"  output_dir:      {spec.output_dir}")
 
     import random
+    from datetime import UTC, datetime
 
     base_seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
+    spec_name = type(spec).__module__.split(".")[-1]
     workflow_name = __name__.split(".")[-1]
+    now = datetime.now(UTC)
     results: list[GenerationResult] = []
 
     for i in range(spec.count):
         seed = base_seed + i
-        output_path = Path(str(spec.output_dir)) / f"placeholder_{seed}.png"
+        output_path = (
+            Path(str(spec.output_dir))
+            / workflow_name
+            / spec_name
+            / now.strftime("%Y%m%d")
+            / f"{now.strftime('%H%M%S')}_{seed}.png"
+        )
         results.append(GenerationResult(
             image_path=output_path,
             seed=seed,

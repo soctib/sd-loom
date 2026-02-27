@@ -40,10 +40,7 @@ VRAM_BATCH_SIZE: dict[str, int] = {"low": 1, "medium": 2, "high": 4}
 
 def run(spec: SpecProtocol) -> list[GenerationResult]:
     """SDXL txt2img workflow with VRAM-aware batching."""
-    try:
-        model_path = resolve_model(spec.model)
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(_model_not_found_message(spec, exc)) from exc
+    model_path = _resolve_model_with_hash_fallback(spec)
     click.echo(f"Loading {model_path.name} ...")
 
     pipe: Any = StableDiffusionXLPipeline.from_single_file(
@@ -177,38 +174,68 @@ def _resolve_clip_skip(
     return spec_clip_skip
 
 
-def _model_not_found_message(spec: SpecProtocol, original: Exception) -> str:
-    """Build a helpful error message, looking up CivitAI if we have a hash."""
-    msg = str(original)
-    if not spec.model_hash:
-        return msg
-
+def _civitai_lookup(model_hash: str) -> dict[str, Any] | None:
+    """Look up a model by hash on CivitAI. Returns API response or None."""
     import json
     import urllib.request
 
-    url = f"https://civitai.com/api/v1/model-versions/by-hash/{spec.model_hash}"
+    url = f"https://civitai.com/api/v1/model-versions/by-hash/{model_hash}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "sd-loom/0.1"})
         with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
+            result: dict[str, Any] = json.loads(resp.read())
+            return result
     except Exception:
-        return msg + f"\n\nModel hash: {spec.model_hash} (CivitAI lookup failed)"
+        return None
 
-    model_name = data.get("model", {}).get("name", "Unknown")
-    version_name = data.get("name", "")
-    download_url = data.get("downloadUrl", "")
-    base_model = data.get("baseModel", "")
-    filename = ""
-    for f in data.get("files", []):
-        if f.get("primary"):
-            filename = f.get("name", "")
-            break
 
-    return (
-        f"{msg}\n\n"
-        f"CivitAI match: {model_name} {version_name} ({base_model})\n"
-        f"Download: {download_url}\n"
-        f"Save as: models/sdxl/checkpoints/{filename}"
+def _resolve_model_with_hash_fallback(spec: SpecProtocol) -> Any:
+    """Resolve model by name, falling back to CivitAI hash lookup for the canonical filename."""
+    from pathlib import Path
+
+    # 1. Try the name from the spec
+    try:
+        return resolve_model(spec.model)
+    except FileNotFoundError:
+        pass
+
+    # 2. If we have a hash, ask CivitAI for the canonical filename
+    if spec.model_hash:
+        civitai = _civitai_lookup(spec.model_hash)
+        if civitai:
+            for f in civitai.get("files", []):
+                if f.get("primary"):
+                    canonical = Path(f["name"]).stem
+                    try:
+                        resolved = resolve_model(canonical)
+                        click.echo(
+                            f"Model '{spec.model}' not found, "
+                            f"but matched '{resolved.name}' by hash"
+                        )
+                        return resolved
+                    except FileNotFoundError:
+                        pass
+
+            # Still not found — give a helpful download message
+            model_name = civitai.get("model", {}).get("name", "Unknown")
+            version_name = civitai.get("name", "")
+            base_model = civitai.get("baseModel", "")
+            download_url = civitai.get("downloadUrl", "")
+            filename = ""
+            for f in civitai.get("files", []):
+                if f.get("primary"):
+                    filename = f.get("name", "")
+                    break
+
+            raise FileNotFoundError(
+                f"No models matching '{spec.model}' found locally.\n\n"
+                f"CivitAI match: {model_name} {version_name} ({base_model})\n"
+                f"Download: {download_url}\n"
+                f"Save as: models/sdxl/checkpoints/{filename}"
+            )
+
+    raise FileNotFoundError(
+        f"No models matching '{spec.model}' found in models/"
     )
 
 

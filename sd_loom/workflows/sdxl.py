@@ -40,7 +40,10 @@ VRAM_BATCH_SIZE: dict[str, int] = {"low": 1, "medium": 2, "high": 4}
 
 def run(spec: SpecProtocol) -> list[GenerationResult]:
     """SDXL txt2img workflow with VRAM-aware batching."""
-    model_path = resolve_model(spec.model)
+    try:
+        model_path = resolve_model(spec.model)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(_model_not_found_message(spec, exc)) from exc
     click.echo(f"Loading {model_path.name} ...")
 
     pipe: Any = StableDiffusionXLPipeline.from_single_file(
@@ -172,6 +175,41 @@ def _resolve_clip_skip(
         return lora_clip_skip
 
     return spec_clip_skip
+
+
+def _model_not_found_message(spec: SpecProtocol, original: Exception) -> str:
+    """Build a helpful error message, looking up CivitAI if we have a hash."""
+    msg = str(original)
+    if not spec.model_hash:
+        return msg
+
+    import json
+    import urllib.request
+
+    url = f"https://civitai.com/api/v1/model-versions/by-hash/{spec.model_hash}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "sd-loom/0.1"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+    except Exception:
+        return msg + f"\n\nModel hash: {spec.model_hash} (CivitAI lookup failed)"
+
+    model_name = data.get("model", {}).get("name", "Unknown")
+    version_name = data.get("name", "")
+    download_url = data.get("downloadUrl", "")
+    base_model = data.get("baseModel", "")
+    filename = ""
+    for f in data.get("files", []):
+        if f.get("primary"):
+            filename = f.get("name", "")
+            break
+
+    return (
+        f"{msg}\n\n"
+        f"CivitAI match: {model_name} {version_name} ({base_model})\n"
+        f"Download: {download_url}\n"
+        f"Save as: models/sdxl/checkpoints/{filename}"
+    )
 
 
 VRAM_PROFILES = ("low", "medium", "high")

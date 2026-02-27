@@ -20,6 +20,7 @@ class SpecProtocol(Protocol):
     count: int
     scheduler: str
     clip_skip: int
+    model_hash: str
     vae: str
     loras: list[tuple[str, float]]
     vram: str

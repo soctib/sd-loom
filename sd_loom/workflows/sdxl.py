@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING, Any
 import click
 import torch
 from diffusers import (
+    DDIMScheduler,
     DPMSolverMultistepScheduler,
+    DPMSolverSDEScheduler,
     EulerAncestralDiscreteScheduler,
     EulerDiscreteScheduler,
     StableDiffusionXLPipeline,
@@ -26,6 +28,11 @@ SCHEDULERS: dict[str, tuple[type[Any], dict[str, Any]]] = {
     "euler_a": (EulerAncestralDiscreteScheduler, {}),
     "dpm++_2m": (DPMSolverMultistepScheduler, {}),
     "dpm++_2m_karras": (DPMSolverMultistepScheduler, {"use_karras_sigmas": True}),
+    "dpm++_2m_sde": (DPMSolverMultistepScheduler, {"algorithm_type": "sde-dpmsolver++"}),
+    "dpm++_2m_sde_karras": (DPMSolverMultistepScheduler, {"algorithm_type": "sde-dpmsolver++", "use_karras_sigmas": True}),
+    "dpm++_sde": (DPMSolverSDEScheduler, {}),
+    "dpm++_sde_karras": (DPMSolverSDEScheduler, {"use_karras_sigmas": True}),
+    "ddim": (DDIMScheduler, {}),
 }
 
 VRAM_BATCH_SIZE: dict[str, int] = {"low": 1, "medium": 2, "high": 4}
@@ -62,12 +69,16 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
             [(name, path) for name, path, _ in resolved_loras],
             spec.clip_skip,
         )
+        adapter_names: list[str] = []
+        adapter_weights: list[float] = []
         for lora_name, lora_path, weight in resolved_loras:
+            # PyTorch module names can't contain "." — sanitize
+            adapter_name = lora_path.stem.replace(".", "_")
             click.echo(f"Loading LoRA {lora_path.name} (weight={weight}) ...")
-            pipe.load_lora_weights(str(lora_path), adapter_name=lora_name)
-        names = [name for name, _ in spec.loras]
-        weights = [w for _, w in spec.loras]
-        pipe.set_adapters(names, adapter_weights=weights)
+            pipe.load_lora_weights(str(lora_path), adapter_name=adapter_name)
+            adapter_names.append(adapter_name)
+            adapter_weights.append(weight)
+        pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
 
     _apply_vram_profile(pipe, spec.vram)
 

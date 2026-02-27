@@ -91,7 +91,10 @@ def _load_json_spec(path: Path) -> SpecProtocol:
     from sd_loom.specs import DefaultSpec
 
     data = json.loads(path.read_text())
-    instance: SpecProtocol = DefaultSpec.model_validate(data)
+    # Create a named subclass so save_image picks up the file stem as spec name
+    spec_name = path.stem
+    cls = type(spec_name, (DefaultSpec,), {"__module__": f"sd_loom.user_specs.{spec_name}"})
+    instance: SpecProtocol = cls.model_validate(data)
     return instance
 
 

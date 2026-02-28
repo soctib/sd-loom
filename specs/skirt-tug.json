@@ -11,6 +11,7 @@
   "cfg_scale": 5.0,
   "seed": 1544298653,
   "scheduler": "dpm++_2m_sde_karras",
+  "clip_skip": 2,
   "loras": [
     [
       "skirt tug_illustrious_V2.0",

@@ -21,6 +21,7 @@ ml = [
     "accelerate",
     "safetensors",
     "peft",
+    "compel>=2.0",
 ]
 dev = [
     "mypy>=1.11",
@@ -49,6 +50,8 @@ module = [
     "accelerate.*",
     "safetensors",
     "safetensors.*",
+    "compel",
+    "compel.*",
 ]
 ignore_missing_imports = true
 

@@ -1,0 +1,26 @@
+{
+  "prompt": {
+    "positive": "masterpiece,amazing quality,newest,absurdres,highres,detailed face,cute,kawaii,depth of field,simple background,anime coloring, BREAK ,skirt tug,skirt,1girl,wind,long skirt,",
+    "negative": "worst quality,bad quality,lowres,error,bad hands,mutated hands,signature,username,logo,censored,bar censored,halo,multiple angel,split view,"
+  },
+  "model": "boleromix_illustrious_V6.01",
+  "model_hash": "7aba508c68",
+  "width": 1024,
+  "height": 1536,
+  "steps": 30,
+  "cfg_scale": 5.0,
+  "seed": 1544298653,
+  "scheduler": "dpm++_2m_sde_karras",
+  "loras": [
+    [
+      "skirt tug_illustrious_V2.0",
+      1.0
+    ]
+  ],
+  "a1111_extra": {
+    "Version": "f2.0.1v1.10.1-previous-669-gdfdcbab6",
+    "Denoising strength": "0.4",
+    "SD upscale overlap": "64",
+    "SD upscale upscaler": "remacri_original"
+  }
+}

@@ -16,7 +16,7 @@ Built-in specs. Each module defines a single `LoomSpec` subclass; the loader fin
 - **`__init__.py`** — `DefaultSpec(LoomSpec)` (sensible defaults for everything except `prompt`; extend this)
 - Fields include `vae: str` (bare name, resolved in `models/vae/`) and `loras: list[tuple[str, float]]` (name/weight pairs, resolved in `models/sdxl/lora/`)
 
-### `prompts/` (project root)
+### `specs/` (project root)
 User-contributed specs. Not part of the package. `example.py` is a starting point.
 
 ### `sd_loom/styles/`
@@ -26,7 +26,7 @@ Built-in prompt styles. Each style is a callable `_Style` instance that takes a 
 Built-in workflows. Each module exports a `run(spec: SpecProtocol) -> GenerationResult` function. User-contributed workflows live anywhere on disk and are passed as file paths.
 
 ## Resolution Rules
-- **File path** → user file: `prompts/example.py` loaded dynamically
+- **File path** → user file: `specs/example.py` loaded dynamically
 - **Bare name** → built-in: `foo` resolves to `sd_loom.specs.foo`
 - Detection: contains `/`, `\`, or ends with `.py` → file path; otherwise → built-in
 
@@ -37,8 +37,8 @@ Built-in workflows. Each module exports a `run(spec: SpecProtocol) -> Generation
 
 ## CLI
 ```
-loom run sdxl prompts/example.py       # user spec, sdxl workflow
-loom run debug prompts/example.py      # debug workflow
+loom run sdxl specs/example.py       # user spec, sdxl workflow
+loom run debug specs/example.py      # debug workflow
 loom info outputs/sdxl/example_*.png   # show embedded metadata
 ```
 

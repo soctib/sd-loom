@@ -10,7 +10,7 @@ Most SD frontends bury settings in JSON files or drag-and-drop UIs that are hard
 
 ```bash
 pip install -e ".[dev]"
-loom run sdxl prompts/example.py
+loom run sdxl specs/example.py
 ```
 
 ## CLI
@@ -18,8 +18,8 @@ loom run sdxl prompts/example.py
 ### Generate images
 
 ```bash
-loom run sdxl prompts/example.py                    # SDXL workflow, user prompt
-loom run debug prompts/example.py                   # debug workflow (prints spec, no GPU)
+loom run sdxl specs/example.py                    # SDXL workflow, user prompt
+loom run debug specs/example.py                   # debug workflow (prints spec, no GPU)
 ```
 
 ### Override prompt fields
@@ -27,9 +27,9 @@ loom run debug prompts/example.py                   # debug workflow (prints spe
 Any field in the prompt spec can be overridden from the CLI with `--set`:
 
 ```bash
-loom run sdxl prompts/example.py --set seed=42
-loom run sdxl prompts/example.py --set steps=50 --set cfg_scale=5.0
-loom run sdxl prompts/example.py --set vram=high
+loom run sdxl specs/example.py --set seed=42
+loom run sdxl specs/example.py --set steps=50 --set cfg_scale=5.0
+loom run sdxl specs/example.py --set vram=high
 ```
 
 ### Batch generation
@@ -37,8 +37,8 @@ loom run sdxl prompts/example.py --set vram=high
 Generate multiple images in one run. Batching is automatic based on your VRAM profile (low=1, medium=2, high=4 images per forward pass):
 
 ```bash
-loom run sdxl prompts/example.py --count 4
-loom run sdxl prompts/example.py --count 4 --set vram=high   # all 4 in one pass
+loom run sdxl specs/example.py --count 4
+loom run sdxl specs/example.py --count 4 --set vram=high   # all 4 in one pass
 ```
 
 Seeds are sequential from the base seed (random or explicit).
@@ -66,7 +66,7 @@ Control GPU memory usage with `--set vram=PROFILE`:
 Models are resolved by fuzzy match against your local `.safetensors` files — case-insensitive, partial match:
 
 ```bash
-loom run sdxl prompts/example.py --set model=illustrious
+loom run sdxl specs/example.py --set model=illustrious
 ```
 
 ## Specs
@@ -82,7 +82,7 @@ class MySpec(DefaultSpec):
     model = "illustriousRealismBy_v10VAE"
 ```
 
-`DefaultSpec` provides sensible defaults for everything except `prompt`. See `prompts/example.py` for a starting point.
+`DefaultSpec` provides sensible defaults for everything except `prompt`. See `specs/example.py` for a starting point.
 
 ### VAE and LoRA
 
@@ -102,7 +102,7 @@ class MySpec(DefaultSpec):
 Or override from the CLI:
 
 ```bash
-loom run sdxl prompts/example.py --set vae=p6_sdxl_vae
+loom run sdxl specs/example.py --set vae=p6_sdxl_vae
 ```
 
 VAE names are resolved by fuzzy match against `models/vae/`. LoRA names are resolved against `models/sdxl/lora/`.

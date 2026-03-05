@@ -42,9 +42,35 @@ SCHEDULERS: dict[str, tuple[type[Any], dict[str, Any]]] = {
 VRAM_BATCH_SIZE: dict[str, int] = {"low": 1, "medium": 2, "high": 4}
 VRAM_PROFILES = ("low", "medium", "high")
 
+# Pipeline cache — reuse across consecutive specs with the same model/VAE/LoRAs.
+_pipe_cache_key: str = ""
+_pipe_cache: tuple[Any, int] | None = None
+
+
+def _make_pipe_key(spec: SpecProtocol) -> str:
+    """Build a cache key from model, VAE, and LoRAs."""
+    model_path = resolve_model_with_hash_fallback(spec)
+    return f"{model_path}:{spec.vae}:{tuple(sorted(spec.loras))}"
+
 
 def load_pipeline(spec: SpecProtocol) -> tuple[Any, int]:
-    """Load model, VAE, and LoRAs. Returns (pipeline, clip_skip)."""
+    """Load model, VAE, and LoRAs. Returns (pipeline, clip_skip).
+
+    Results are cached — consecutive calls with the same model/VAE/LoRAs
+    skip loading entirely.
+    """
+    global _pipe_cache_key, _pipe_cache
+
+    key = _make_pipe_key(spec)
+    if key == _pipe_cache_key and _pipe_cache is not None:
+        click.echo("Reusing cached pipeline")
+        return _pipe_cache
+
+    # Clear old cache
+    _pipe_cache = None
+    _pipe_cache_key = ""
+    torch.cuda.empty_cache()
+
     model_path = resolve_model_with_hash_fallback(spec)
     click.echo(f"Loading {model_path.name} ...")
 
@@ -84,6 +110,8 @@ def load_pipeline(spec: SpecProtocol) -> tuple[Any, int]:
             adapter_weights.append(weight)
         pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
 
+    _pipe_cache_key = key
+    _pipe_cache = (pipe, clip_skip)
     return pipe, clip_skip
 
 

@@ -37,6 +37,11 @@ K_SAMPLERS: dict[str, tuple[str, bool]] = {
 _SDE_SAMPLERS = {"sample_dpmpp_2m_sde", "sample_dpmpp_sde"}
 
 
+# ldm UNet cache — reuse across consecutive specs with the same model.
+_unet_cache_key: str = ""
+_unet_cache: dict[str, Any] = {}
+
+
 class _LdmUNetWrapper:
     """Bridge ldm UNet to k-diffusion's apply_model() convention.
 
@@ -63,6 +68,8 @@ class _LdmUNetWrapper:
 
 def run(spec: SpecProtocol) -> list[LoomData]:
     """SDXL txt2img with k-diffusion sampling and ldm UNet."""
+    global _unet_cache_key, _unet_cache
+
     if spec.scheduler not in K_SAMPLERS:
         supported = ", ".join(sorted(K_SAMPLERS))
         raise ValueError(
@@ -70,13 +77,24 @@ def run(spec: SpecProtocol) -> list[LoomData]:
             f"Supported: {supported}. For ddim, use sdxl_diffusers."
         )
 
-    # Load diffusers pipeline for text encoders, tokenizers, VAE, and alphas_cumprod.
+    # Load diffusers pipeline (cached if same model/VAE/LoRAs).
     pipe, _clip_skip = load_pipeline(spec)
 
-    # Load ldm UNet directly from safetensors (bypasses diffusers conversion).
+    # Load ldm UNet (cached if same model).
     model_path = resolve_model_with_hash_fallback(spec)
-    click.echo("Loading ldm UNet ...")
-    ldm_unet = load_ldm_unet(model_path)
+    unet_key = str(model_path)
+    if unet_key == _unet_cache_key and _unet_cache:
+        ldm_unet = _unet_cache["unet"]
+        denoiser = _unet_cache["denoiser"]
+    else:
+        _unet_cache.clear()
+        click.echo("Loading ldm UNet ...")
+        ldm_unet = load_ldm_unet(model_path)
+        alphas_cumprod = pipe.scheduler.alphas_cumprod
+        wrapper = _LdmUNetWrapper(ldm_unet, alphas_cumprod)
+        denoiser = K.external.CompVisDenoiser(wrapper, quantize=True)
+        _unet_cache_key = unet_key
+        _unet_cache.update(unet=ldm_unet, denoiser=denoiser)
 
     if spec.loras:
         click.echo(
@@ -84,19 +102,15 @@ def run(spec: SpecProtocol) -> list[LoomData]:
             "UNet LoRA support for the ldm path is a follow-up task."
         )
 
-    # --- Encode prompts with compel (Forge-compatible penultimate hidden states) ---
+    # --- Encode prompts with compel (always — prompts change per spec) ---
     prompt_embeds, neg_embeds, pooled, neg_pooled = _encode_prompt(pipe, spec)
 
-    # Free the diffusers UNet — we only needed the pipeline for text encoders,
-    # VAE, tokenizers, and alphas_cumprod.
-    alphas_cumprod = pipe.scheduler.alphas_cumprod
-    del pipe.unet
-    torch.cuda.empty_cache()
+    # Move diffusers UNet to CPU (not used in ldm path, keep for cache).
+    if hasattr(pipe, "unet") and pipe.unet is not None:
+        pipe.unet.to("cpu")
+        torch.cuda.empty_cache()
 
-    # --- Build k-diffusion denoiser from ldm UNet ---
-    wrapper = _LdmUNetWrapper(ldm_unet, alphas_cumprod)
-    denoiser: Any = K.external.CompVisDenoiser(wrapper, quantize=True)
-    denoiser.to("cuda")  # moves internal sigma/log_sigma buffers
+    denoiser.to("cuda")
 
     # --- Sigma schedule ---
     sampler_name, use_karras = K_SAMPLERS[spec.scheduler]

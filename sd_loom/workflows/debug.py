@@ -19,7 +19,6 @@ def run(spec: SpecProtocol) -> list[LoomData]:
         f"  steps:           {spec.steps}",
         f"  cfg_scale:       {spec.cfg_scale}",
         f"  seed:            {spec.seed}",
-        f"  count:           {spec.count}",
         f"  scheduler:       {spec.scheduler}",
         f"  clip_skip:       {spec.clip_skip}",
         f"  vae:             {spec.vae!r}",

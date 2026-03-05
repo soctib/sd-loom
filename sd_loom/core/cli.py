@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -9,7 +10,26 @@ import click
 from sd_loom.core.loader import load_spec, load_workflow
 
 if TYPE_CHECKING:
+    from sd_loom.core.protocol import SpecProtocol
     from sd_loom.core.types import LoomData
+
+
+def _expand_count(specs: list[SpecProtocol], count: int) -> list[SpecProtocol]:
+    """Expand each spec into *count* copies with sequential seeds."""
+    from pydantic import BaseModel
+
+    expanded: list[SpecProtocol] = []
+    for spec in specs:
+        base_seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
+        for i in range(count):
+            if isinstance(spec, BaseModel):
+                copy: SpecProtocol = type(spec).model_validate(
+                    {**spec.model_dump(), "seed": base_seed + i}
+                )
+            else:
+                copy = spec
+            expanded.append(copy)
+    return expanded
 
 
 @click.command()
@@ -18,7 +38,7 @@ if TYPE_CHECKING:
 @click.option("-s", "--set", "overrides", multiple=True,
               help="Override a spec field: --set key=value")
 @click.option("-n", "--count", type=int, default=None,
-              help="Number of images to generate (shorthand for --set count=N)")
+              help="Generate N images per spec (expands specs with sequential seeds)")
 def main(workflow_name: str, spec_name: str, overrides: tuple[str, ...],
          count: int | None) -> None:
     """sd-loom: Stable Diffusion where everything is Python.
@@ -27,10 +47,9 @@ def main(workflow_name: str, spec_name: str, overrides: tuple[str, ...],
     Everything is a workflow. The spec can be a .py file, .json file,
     bare built-in name, or any other file (image, safetensors, etc.).
     """
-    all_overrides = list(overrides)
+    specs = load_spec(spec_name, overrides=overrides)
     if count is not None:
-        all_overrides.append(f"count={count}")
-    specs = load_spec(spec_name, overrides=tuple(all_overrides))
+        specs = _expand_count(specs, count)
     workflow_mod = load_workflow(workflow_name)
     run_fn: Any = workflow_mod.run
     run_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")

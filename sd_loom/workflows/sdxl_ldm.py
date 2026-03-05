@@ -159,10 +159,8 @@ def run(spec: SpecProtocol) -> list[LoomData]:
         uncond, cond = noise_pred.chunk(2)
         return uncond + cfg_scale * (cond - uncond)
 
-    # --- Generation loop ---
-    base_seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
-    seeds = [base_seed + i for i in range(spec.count)]
-    results: list[LoomData] = []
+    # --- Generation ---
+    seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
     workflow_name = __name__.split(".")[-1]
     latent_shape = (1, 4, spec.height // 8, spec.width // 8)
 
@@ -172,65 +170,60 @@ def run(spec: SpecProtocol) -> list[LoomData]:
         pipe.vae.to("cuda")
         pipe.vae.enable_tiling()
 
-    for seed in seeds:
-        click.echo(
-            f"Generating {spec.width}x{spec.height}, {spec.steps} steps, "
-            f"cfg {spec.cfg_scale}, seed {seed}, "
-            f"scheduler {spec.scheduler} (k-diffusion, ldm UNet)"
+    click.echo(
+        f"Generating {spec.width}x{spec.height}, {spec.steps} steps, "
+        f"cfg {spec.cfg_scale}, seed {seed}, "
+        f"scheduler {spec.scheduler} (k-diffusion, ldm UNet)"
+    )
+
+    # Initial noise — GPU matches Forge default, CPU for cross-platform reproducibility.
+    rng_device = "cpu" if spec.rng == "cpu" else "cuda"
+    generator = torch.Generator(device=rng_device).manual_seed(seed)
+    latents = torch.randn(latent_shape, device=rng_device, generator=generator)
+    latents = latents.to("cuda") * sigmas[0]
+
+    sampler_kwargs: dict[str, Any] = {}
+    if sampler_name in _SDE_SAMPLERS:
+        sampler_kwargs["noise_sampler"] = K.sampling.BrownianTreeNoiseSampler(
+            latents, sigma_min=sigmas[-2], sigma_max=sigmas[0], seed=seed,
         )
 
-        # Initial noise — GPU matches Forge default, CPU for cross-platform reproducibility.
-        rng_device = "cpu" if spec.rng == "cpu" else "cuda"
-        generator = torch.Generator(device=rng_device).manual_seed(seed)
-        latents = torch.randn(latent_shape, device=rng_device, generator=generator)
-        latents = latents.to("cuda") * sigmas[0]
+    t0 = time.perf_counter()
+    with torch.no_grad():
+        denoised = sampler_fn(
+            model_fn, latents, sigmas,
+            extra_args=extra_args, **sampler_kwargs,
+        )
 
-        sampler_kwargs: dict[str, Any] = {}
-        if sampler_name in _SDE_SAMPLERS:
-            sampler_kwargs["noise_sampler"] = K.sampling.BrownianTreeNoiseSampler(
-                latents, sigma_min=sigmas[-2], sigma_max=sigmas[0], seed=seed,
-            )
+    # --- VAE decode (upcast to float32 to avoid NaN/black images) ---
+    if spec.vram == "low":
+        ldm_unet.to("cpu")
+        torch.cuda.empty_cache()
+        pipe.vae.to("cuda")
+        pipe.vae.enable_tiling()
 
-        t0 = time.perf_counter()
-        with torch.no_grad():
-            denoised = sampler_fn(
-                model_fn, latents, sigmas,
-                extra_args=extra_args, **sampler_kwargs,
-            )
+    pipe.vae.to(dtype=torch.float32)
+    with torch.no_grad():
+        decoded = pipe.vae.decode(
+            denoised.float() / pipe.vae.config.scaling_factor,
+            return_dict=False,
+        )[0]
+    pipe.vae.to(dtype=torch.float16)
 
-        # --- VAE decode (upcast to float32 to avoid NaN/black images) ---
-        if spec.vram == "low":
-            ldm_unet.to("cpu")
-            torch.cuda.empty_cache()
-            pipe.vae.to("cuda")
-            pipe.vae.enable_tiling()
+    image = pipe.image_processor.postprocess(decoded, output_type="pil")[0]
+    elapsed = time.perf_counter() - t0
 
-        pipe.vae.to(dtype=torch.float32)
-        with torch.no_grad():
-            decoded = pipe.vae.decode(
-                denoised.float() / pipe.vae.config.scaling_factor,
-                return_dict=False,
-            )[0]
-        pipe.vae.to(dtype=torch.float16)
+    if spec.vram == "low":
+        pipe.vae.to("cpu")
+        torch.cuda.empty_cache()
 
-        image = pipe.image_processor.postprocess(decoded, output_type="pil")[0]
-        elapsed = time.perf_counter() - t0
-
-        if spec.vram == "low":
-            pipe.vae.to("cpu")
-            torch.cuda.empty_cache()
-            if seed != seeds[-1]:
-                ldm_unet.to("cuda")
-
-        click.echo(f"Generated (seed={seed}, {elapsed:.1f}s)")
-        results.append(LoomData(
-            image=image,
-            seed=seed,
-            elapsed_seconds=elapsed,
-            workflow=workflow_name,
-        ))
-
-    return results
+    click.echo(f"Generated (seed={seed}, {elapsed:.1f}s)")
+    return [LoomData(
+        image=image,
+        seed=seed,
+        elapsed_seconds=elapsed,
+        workflow=workflow_name,
+    )]
 
 
 def _encode_prompt(

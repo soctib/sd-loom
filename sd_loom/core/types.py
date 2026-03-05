@@ -56,7 +56,6 @@ class LoomSpec(BaseModel, metaclass=_SpecMeta):
     steps: int
     cfg_scale: float
     seed: int
-    count: int
     scheduler: str
     clip_skip: int
     model_hash: str

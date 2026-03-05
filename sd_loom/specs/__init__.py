@@ -29,7 +29,6 @@ class DefaultSpec(LoomSpec):  # type: ignore[metaclass]
     steps: int = 30
     cfg_scale: float = 7.0
     seed: int = -1
-    count: int = 1
     scheduler: str = "euler"
     clip_skip: int = 1
     model_hash: str = ""

@@ -39,7 +39,6 @@ SCHEDULERS: dict[str, tuple[type[Any], dict[str, Any]]] = {
     "ddim": (DDIMScheduler, {}),
 }
 
-VRAM_BATCH_SIZE: dict[str, int] = {"low": 1, "medium": 2, "high": 4}
 VRAM_PROFILES = ("low", "medium", "high")
 
 # Pipeline cache — reuse across consecutive specs with the same model/VAE/LoRAs.
@@ -121,49 +120,38 @@ def generate(
     prompt_kwargs: dict[str, Any],
     workflow_name: str,
 ) -> list[LoomData]:
-    """Apply VRAM profile, scheduler, and run the batched generation loop."""
+    """Apply VRAM profile, scheduler, and generate a single image."""
     apply_vram_profile(pipe, spec.vram)
     pipe.scheduler = make_scheduler(spec.scheduler, pipe.scheduler.config)
 
-    base_seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
-    seeds = [base_seed + i for i in range(spec.count)]
-    max_batch = VRAM_BATCH_SIZE.get(spec.vram, 1)
-    results: list[LoomData] = []
+    seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
+    rng_device = "cpu" if spec.rng == "cpu" else "cuda"
+    generator = torch.Generator(device=rng_device).manual_seed(seed)
 
-    for chunk_start in range(0, len(seeds), max_batch):
-        chunk_seeds = seeds[chunk_start : chunk_start + max_batch]
-        rng_device = "cpu" if spec.rng == "cpu" else "cuda"
-        generators = [
-            torch.Generator(device=rng_device).manual_seed(s) for s in chunk_seeds
-        ]
+    click.echo(
+        f"Generating {spec.width}x{spec.height}, {spec.steps} steps, "
+        f"cfg {spec.cfg_scale}, seed {seed}, scheduler {spec.scheduler}"
+    )
 
-        click.echo(
-            f"Generating {spec.width}x{spec.height}, {spec.steps} steps, "
-            f"cfg {spec.cfg_scale}, seeds {chunk_seeds}, scheduler {spec.scheduler}"
-        )
+    t0 = time.perf_counter()
+    pipe_result: Any = pipe(
+        **prompt_kwargs,
+        width=spec.width,
+        height=spec.height,
+        num_inference_steps=spec.steps,
+        guidance_scale=spec.cfg_scale,
+        num_images_per_prompt=1,
+        generator=[generator],
+    )
+    elapsed = time.perf_counter() - t0
 
-        t0 = time.perf_counter()
-        pipe_result: Any = pipe(
-            **prompt_kwargs,
-            width=spec.width,
-            height=spec.height,
-            num_inference_steps=spec.steps,
-            guidance_scale=spec.cfg_scale,
-            num_images_per_prompt=len(chunk_seeds),
-            generator=generators,
-        )
-        elapsed = time.perf_counter() - t0
-
-        for i, seed in enumerate(chunk_seeds):
-            click.echo(f"Generated (seed={seed}, {elapsed:.1f}s)")
-            results.append(LoomData(
-                image=pipe_result.images[i],
-                seed=seed,
-                elapsed_seconds=elapsed,
-                workflow=workflow_name,
-            ))
-
-    return results
+    click.echo(f"Generated (seed={seed}, {elapsed:.1f}s)")
+    return [LoomData(
+        image=pipe_result.images[0],
+        seed=seed,
+        elapsed_seconds=elapsed,
+        workflow=workflow_name,
+    )]
 
 
 def resolve_clip_skip(

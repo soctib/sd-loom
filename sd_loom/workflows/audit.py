@@ -258,10 +258,6 @@ def _check_params(spec: SpecProtocol, checks: list[_Check]) -> None:
     else:
         checks.append(_Check("ok", "Steps", str(spec.steps)))
 
-    # Count
-    if spec.count > 10:
-        checks.append(_Check("info", "Count",
-                             f"{spec.count} images — large batch"))
 
 
 def _check_prompt(spec: SpecProtocol, checks: list[_Check]) -> None:

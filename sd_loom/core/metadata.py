@@ -63,7 +63,10 @@ def read_image_metadata(path: Path) -> dict[str, Any]:
             # UserComment is EXIF tag 0x9286 (37510)
             user_comment = exif.get(0x9286)
             if user_comment:
-                text = user_comment if isinstance(user_comment, str) else user_comment.decode("utf-8", errors="replace")
+                if isinstance(user_comment, str):
+                    text = user_comment
+                else:
+                    text = user_comment.decode("utf-8", errors="replace")
                 return parse_a1111(text)
 
     raise ValueError(f"No generation metadata found in {path}")
@@ -101,7 +104,8 @@ def parse_a1111(text: str) -> dict[str, Any]:
 
         positive prompt
         Negative prompt: negative prompt
-        Steps: 30, Sampler: DPM++ 2M SDE, CFG scale: 5, Seed: 42, Size: 1024x1536, Model: name, Schedule type: Karras
+        Steps: 30, Sampler: DPM++ 2M SDE, CFG scale: 5, Seed: 42,
+        Size: 1024x1536, Model: name, Schedule type: Karras
     """
     import re
 

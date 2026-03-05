@@ -9,7 +9,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 import click
-import k_diffusion as K  # type: ignore[import-untyped]
+import k_diffusion as K
 import torch
 
 from sd_loom.core.types import LoomData
@@ -242,11 +242,11 @@ def _encode_prompt(
             requires_pooled=[False, True],
             truncate_long_prompts=False,
         )
-        prompt_embeds, pooled = compel(spec.prompt.positive)
-        neg_embeds, neg_pooled = compel(spec.prompt.negative or "")
+        prompt_embeds, pooled = compel(spec.prompt.positive)  # pyright: ignore[reportAssignmentType]
+        neg_embeds, neg_pooled = compel(spec.prompt.negative or "")  # pyright: ignore[reportAssignmentType]
     finally:
         pipe.text_encoder.to("cpu")
         pipe.text_encoder_2.to("cpu")
         torch.cuda.empty_cache()
 
-    return prompt_embeds, neg_embeds, pooled, neg_pooled
+    return prompt_embeds, neg_embeds, pooled, neg_pooled  # pyright: ignore[reportReturnType]

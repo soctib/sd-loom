@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VENV=".venv/bin"
+
+echo "Running ruff..."
+"$VENV/python" -m ruff check sd_loom/ specs/
+
+echo "Running mypy..."
+"$VENV/python" -m mypy sd_loom/
+
+echo "Running pyright..."
+"$VENV/pyright" sd_loom/ specs/
+
+echo "All checks passed."

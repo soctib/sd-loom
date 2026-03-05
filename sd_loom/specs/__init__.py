@@ -16,6 +16,11 @@ tall = (768, 1344)
 ultrawide = (1536, 640)
 
 
+def lora(name: str, weight: float = 1.0) -> tuple[str, float]:
+    """Shorthand for a LoRA entry: ``lora("detail")`` → ``("detail", 1.0)``."""
+    return (name, weight)
+
+
 class DefaultSpec(LoomSpec):  # type: ignore[metaclass]
     prompt: Prompt = Prompt(positive="")
     model: str = ""

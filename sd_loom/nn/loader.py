@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import safetensors.torch  # type: ignore[import-untyped]
+import safetensors.torch
 
 from sd_loom.nn.unet import IntegratedUNet2DConditionModel
 

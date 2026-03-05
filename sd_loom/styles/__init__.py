@@ -334,6 +334,8 @@ pony = _Style(
 
 import sys as _sys  # noqa: E402
 
+_name = ""
+_obj: object = None
 for _name, _obj in list(vars(_sys.modules[__name__]).items()):
     if isinstance(_obj, _Style) and not _name.startswith("_"):
         _obj.name = _name

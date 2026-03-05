@@ -39,8 +39,8 @@ def _encode_prompt(pipe: Any, spec: SpecProtocol) -> dict[str, Any]:
             truncate_long_prompts=False,
         )
 
-        prompt_embeds, pooled = compel(spec.prompt.positive)
-        neg_embeds, neg_pooled = compel(spec.prompt.negative or "")
+        prompt_embeds, pooled = compel(spec.prompt.positive)  # pyright: ignore[reportAssignmentType]
+        neg_embeds, neg_pooled = compel(spec.prompt.negative or "")  # pyright: ignore[reportAssignmentType]
     finally:
         pipe.text_encoder.to("cpu")
         pipe.text_encoder_2.to("cpu")

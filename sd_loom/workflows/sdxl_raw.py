@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sd_loom.core.types import LoomData
 from sd_loom.workflows.sdxl_common import generate, load_pipeline
 
 if TYPE_CHECKING:
     from sd_loom.core.protocol import SpecProtocol
+    from sd_loom.core.types import LoomData
 
 
 def run(spec: SpecProtocol) -> list[LoomData]:

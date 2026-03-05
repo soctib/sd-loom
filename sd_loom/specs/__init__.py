@@ -22,3 +22,4 @@ class DefaultSpec(LoomSpec):
     vram: str = "low"
     rng: str = "gpu"
     output_dir: str | Path = "outputs"
+    input_image: str = ""

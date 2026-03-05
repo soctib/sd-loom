@@ -98,24 +98,44 @@ def _load_json_spec(path: Path) -> SpecProtocol:
     return instance
 
 
+def _load_file_spec(path: Path) -> SpecProtocol:
+    """Create a spec from a file path (image, safetensors, etc.).
+
+    Sets ``input_image`` to the resolved path. All other fields use defaults.
+    """
+    from sd_loom.specs import DefaultSpec
+
+    resolved = str(path.resolve())
+    spec_name = path.stem
+    cls = type(spec_name, (DefaultSpec,), {"__module__": f"sd_loom.user_specs.{spec_name}"})
+    instance: SpecProtocol = cls(input_image=resolved)
+    return instance
+
+
 def load_spec(
     name_or_path: str,
     *,
     overrides: tuple[str, ...] = (),
 ) -> SpecProtocol:
-    """Load a spec by name (built-in), file path (.py), or JSON file (.json).
+    """Load a spec by name (built-in), file path (.py/.json), or input file.
 
-    For .py files, the module must define exactly one ``LoomSpec`` subclass.
-    For .json files, missing fields are filled from ``DefaultSpec`` defaults.
+    - ``.py`` files must define exactly one ``LoomSpec`` subclass.
+    - ``.json`` files are loaded as data, missing fields filled from ``DefaultSpec``.
+    - Other file paths (images, safetensors, etc.) become a ``DefaultSpec`` with
+      ``input_image`` set to the resolved path.
+    - Bare names resolve to built-in specs in ``sd_loom.specs.*``.
     """
     file_path = Path(name_or_path)
 
     if file_path.suffix == ".json":
         instance = _load_json_spec(file_path.resolve())
-    elif _is_file_path(name_or_path):
+    elif file_path.suffix == ".py" and _is_file_path(name_or_path):
         module = _load_module_from_file(name_or_path, "sd_loom.user_specs")
         cls = _find_spec_class(module, name_or_path)
         instance = cls()
+    elif _is_file_path(name_or_path):
+        # Non-py/json file path (image, safetensors, etc.) → input file spec.
+        instance = _load_file_spec(file_path)
     else:
         module = _load_builtin_module("sd_loom.specs", name_or_path)
         cls = _find_spec_class(module, name_or_path)

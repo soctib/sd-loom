@@ -3,8 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003 — Pydantic needs this at runtime
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, field_validator
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 
 class Prompt(BaseModel):
@@ -29,6 +33,7 @@ class LoomSpec(BaseModel):
     vram: str
     rng: str
     output_dir: str | Path
+    input_image: str
 
     @field_validator("prompt", mode="before")
     @classmethod
@@ -40,9 +45,10 @@ class LoomSpec(BaseModel):
 
 
 @dataclass
-class GenerationResult:
-    image_path: Path
-    seed: int
-    elapsed_seconds: float
-    workflow: str
+class LoomData:
+    image: Image.Image | None = None
+    seed: int = 0
+    elapsed_seconds: float = 0.0
+    workflow: str = ""
+    text: str | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))

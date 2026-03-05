@@ -9,10 +9,10 @@ from sd_loom.workflows.sdxl_common import generate, load_pipeline
 
 if TYPE_CHECKING:
     from sd_loom.core.protocol import SpecProtocol
-    from sd_loom.core.types import GenerationResult
+    from sd_loom.core.types import LoomData
 
 
-def run(spec: SpecProtocol) -> list[GenerationResult]:
+def run(spec: SpecProtocol) -> list[LoomData]:
     """SDXL txt2img with compel encoding and VRAM-aware batching."""
     pipe, _clip_skip = load_pipeline(spec)
 

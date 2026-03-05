@@ -18,8 +18,7 @@ from diffusers import (
 
 from sd_loom.core.metadata import read_safetensors_metadata
 from sd_loom.core.resolve import resolve_lora, resolve_model, resolve_vae
-from sd_loom.core.save import save_image
-from sd_loom.core.types import GenerationResult
+from sd_loom.core.types import LoomData
 
 if TYPE_CHECKING:
     from sd_loom.core.protocol import SpecProtocol
@@ -93,7 +92,7 @@ def generate(
     spec: SpecProtocol,
     prompt_kwargs: dict[str, Any],
     workflow_name: str,
-) -> list[GenerationResult]:
+) -> list[LoomData]:
     """Apply VRAM profile, scheduler, and run the batched generation loop."""
     apply_vram_profile(pipe, spec.vram)
     pipe.scheduler = make_scheduler(spec.scheduler, pipe.scheduler.config)
@@ -101,7 +100,7 @@ def generate(
     base_seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
     seeds = [base_seed + i for i in range(spec.count)]
     max_batch = VRAM_BATCH_SIZE.get(spec.vram, 1)
-    results: list[GenerationResult] = []
+    results: list[LoomData] = []
 
     for chunk_start in range(0, len(seeds), max_batch):
         chunk_seeds = seeds[chunk_start : chunk_start + max_batch]
@@ -128,12 +127,9 @@ def generate(
         elapsed = time.perf_counter() - t0
 
         for i, seed in enumerate(chunk_seeds):
-            image_path = save_image(
-                pipe_result.images[i], spec, workflow_name, seed, elapsed,
-            )
-            click.echo(f"Saved: {image_path} (seed={seed}, {elapsed:.1f}s)")
-            results.append(GenerationResult(
-                image_path=image_path,
+            click.echo(f"Generated (seed={seed}, {elapsed:.1f}s)")
+            results.append(LoomData(
+                image=pipe_result.images[i],
                 seed=seed,
                 elapsed_seconds=elapsed,
                 workflow=workflow_name,

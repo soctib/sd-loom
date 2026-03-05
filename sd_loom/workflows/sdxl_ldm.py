@@ -12,8 +12,7 @@ import click
 import k_diffusion as K  # type: ignore[import-untyped]
 import torch
 
-from sd_loom.core.save import save_image
-from sd_loom.core.types import GenerationResult
+from sd_loom.core.types import LoomData
 from sd_loom.nn.loader import load_ldm_unet
 from sd_loom.nn.unet import timestep_embedding
 from sd_loom.workflows.sdxl_common import load_pipeline, resolve_model_with_hash_fallback
@@ -62,7 +61,7 @@ class _LdmUNetWrapper:
         return result.float()
 
 
-def run(spec: SpecProtocol) -> list[GenerationResult]:
+def run(spec: SpecProtocol) -> list[LoomData]:
     """SDXL txt2img with k-diffusion sampling and ldm UNet."""
     if spec.scheduler not in K_SAMPLERS:
         supported = ", ".join(sorted(K_SAMPLERS))
@@ -149,7 +148,7 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
     # --- Generation loop ---
     base_seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
     seeds = [base_seed + i for i in range(spec.count)]
-    results: list[GenerationResult] = []
+    results: list[LoomData] = []
     workflow_name = __name__.split(".")[-1]
     latent_shape = (1, 4, spec.height // 8, spec.width // 8)
 
@@ -209,10 +208,9 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
             if seed != seeds[-1]:
                 ldm_unet.to("cuda")
 
-        image_path = save_image(image, spec, workflow_name, seed, elapsed)
-        click.echo(f"Saved: {image_path} (seed={seed}, {elapsed:.1f}s)")
-        results.append(GenerationResult(
-            image_path=image_path,
+        click.echo(f"Generated (seed={seed}, {elapsed:.1f}s)")
+        results.append(LoomData(
+            image=image,
             seed=seed,
             elapsed_seconds=elapsed,
             workflow=workflow_name,

@@ -3,14 +3,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sd_loom.core.types import GenerationResult
+from sd_loom.core.types import LoomData
 from sd_loom.workflows.sdxl_common import generate, load_pipeline
 
 if TYPE_CHECKING:
     from sd_loom.core.protocol import SpecProtocol
 
 
-def run(spec: SpecProtocol) -> list[GenerationResult]:
+def run(spec: SpecProtocol) -> list[LoomData]:
     """SDXL txt2img with diffusers default encoding and VRAM-aware batching."""
     pipe, clip_skip = load_pipeline(spec)
 

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from sd_loom.core.types import GenerationResult, Prompt
+    from sd_loom.core.types import Prompt
 
 
 @runtime_checkable
@@ -26,8 +26,4 @@ class SpecProtocol(Protocol):
     vram: str
     rng: str
     output_dir: str | Path
-
-
-@runtime_checkable
-class Workflow(Protocol):
-    def run(self, spec: SpecProtocol) -> list[GenerationResult]: ...
+    input_image: str

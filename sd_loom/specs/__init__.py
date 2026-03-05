@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from pathlib import Path  # noqa: TC003 — Pydantic needs this at runtime
 
-from sd_loom.core.types import LoomSpec, Prompt  # noqa: TC003
+from sd_loom.core.types import LoomSpec, Prompt  # noqa: TC003, F401
+
+# ---------------------------------------------------------------------------
+# Resolution presets — (width, height) tuples for common SDXL aspect ratios
+# ---------------------------------------------------------------------------
+
+square = (1024, 1024)
+landscape = (1216, 832)
+portrait = (832, 1216)
+wide = (1344, 768)
+tall = (768, 1344)
+ultrawide = (1536, 640)
 
 
-class DefaultSpec(LoomSpec):
+class DefaultSpec(LoomSpec):  # type: ignore[metaclass]
     prompt: Prompt = Prompt(positive="")
     model: str = ""
     width: int = 1024
@@ -23,3 +34,4 @@ class DefaultSpec(LoomSpec):
     rng: str = "gpu"
     output_dir: str | Path = "outputs"
     input_image: str = ""
+    tag: str = ""

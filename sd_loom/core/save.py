@@ -20,7 +20,7 @@ def save_image(
     elapsed: float,
 ) -> Path:
     """Save a generated image with structured path and embedded metadata."""
-    spec_name: str = type(spec).__module__.split(".")[-1]
+    spec_name: str = spec.tag if spec.tag else type(spec).__module__.split(".")[-1]
     now = datetime.now(UTC)
     date_dir = now.strftime("%Y%m%d")
     time_stamp = now.strftime("%H%M%S")

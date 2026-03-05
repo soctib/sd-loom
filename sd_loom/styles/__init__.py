@@ -14,6 +14,7 @@ class _Style:
     """A reusable prompt template that wraps a subject string into a styled Prompt."""
 
     def __init__(self, template: str, negative: str = "") -> None:
+        self.name = ""
         self.negative = negative
         self._template = template
 
@@ -24,7 +25,7 @@ class _Style:
         )
 
     def __repr__(self) -> str:
-        return f"_Style({self._template!r})"
+        return f"_Style({self.name!r})" if self.name else f"_Style({self._template!r})"
 
 
 # ---------------------------------------------------------------------------
@@ -326,3 +327,23 @@ pony = _Style(
     negative="score_6, score_5, score_4, worst quality, low quality, "
     "bad anatomy, bad hands",
 )
+
+# ---------------------------------------------------------------------------
+# Auto-set .name on every _Style from its module-level variable name
+# ---------------------------------------------------------------------------
+
+import sys as _sys  # noqa: E402
+
+for _name, _obj in list(vars(_sys.modules[__name__]).items()):
+    if isinstance(_obj, _Style) and not _name.startswith("_"):
+        _obj.name = _name
+del _name, _obj
+
+
+def all() -> list[_Style]:  # noqa: A001
+    """Return all built-in styles."""
+    return [
+        obj
+        for name, obj in vars(_sys.modules[__name__]).items()
+        if isinstance(obj, _Style) and not name.startswith("_")
+    ]

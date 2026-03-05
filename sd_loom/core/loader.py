@@ -94,7 +94,7 @@ def _load_json_spec(path: Path) -> SpecProtocol:
     # Create a named subclass so save_image picks up the file stem as spec name
     spec_name = path.stem
     cls = type(spec_name, (DefaultSpec,), {"__module__": f"sd_loom.user_specs.{spec_name}"})
-    instance: SpecProtocol = cls.model_validate(data)
+    instance: SpecProtocol = cls.model_validate(data)  # type: ignore[attr-defined]
     return instance
 
 
@@ -112,14 +112,27 @@ def _load_file_spec(path: Path) -> SpecProtocol:
     return instance
 
 
+def _find_specs_from_module(
+    module: ModuleType, name_or_path: str
+) -> list[SpecProtocol]:
+    """Return specs from a module: a ``specs`` list or a single LoomSpec subclass."""
+    specs_list = getattr(module, "specs", None)
+    if specs_list is not None and isinstance(specs_list, list):
+        return list(specs_list)
+    cls = _find_spec_class(module, name_or_path)
+    return [cls()]
+
+
 def load_spec(
     name_or_path: str,
     *,
     overrides: tuple[str, ...] = (),
-) -> SpecProtocol:
-    """Load a spec by name (built-in), file path (.py/.json), or input file.
+) -> list[SpecProtocol]:
+    """Load specs by name (built-in), file path (.py/.json), or input file.
 
-    - ``.py`` files must define exactly one ``LoomSpec`` subclass.
+    Returns a list — a module may export multiple specs via a ``specs`` list.
+
+    - ``.py`` files must define a ``LoomSpec`` subclass or a ``specs`` list.
     - ``.json`` files are loaded as data, missing fields filled from ``DefaultSpec``.
     - Other file paths (images, safetensors, etc.) become a ``DefaultSpec`` with
       ``input_image`` set to the resolved path.
@@ -128,28 +141,28 @@ def load_spec(
     file_path = Path(name_or_path)
 
     if file_path.suffix == ".json":
-        instance = _load_json_spec(file_path.resolve())
+        instances = [_load_json_spec(file_path.resolve())]
     elif file_path.suffix == ".py" and _is_file_path(name_or_path):
         module = _load_module_from_file(name_or_path, "sd_loom.user_specs")
-        cls = _find_spec_class(module, name_or_path)
-        instance = cls()
+        instances = _find_specs_from_module(module, name_or_path)
     elif _is_file_path(name_or_path):
-        # Non-py/json file path (image, safetensors, etc.) → input file spec.
-        instance = _load_file_spec(file_path)
+        instances = [_load_file_spec(file_path)]
     else:
         module = _load_builtin_module("sd_loom.specs", name_or_path)
-        cls = _find_spec_class(module, name_or_path)
-        instance = cls()
+        instances = _find_specs_from_module(module, name_or_path)
 
     if overrides:
         from pydantic import BaseModel
 
-        if not isinstance(instance, BaseModel):
-            raise TypeError("Spec must be a Pydantic BaseModel")
         parsed = _parse_overrides(overrides)
-        instance = type(instance).model_validate({**instance.model_dump(), **parsed})
+        instances = [
+            type(inst).model_validate({**inst.model_dump(), **parsed})
+            if isinstance(inst, BaseModel)
+            else inst
+            for inst in instances
+        ]
 
-    return instance
+    return instances
 
 
 def load_workflow(name_or_path: str) -> Any:

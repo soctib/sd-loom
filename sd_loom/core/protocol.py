@@ -27,3 +27,4 @@ class SpecProtocol(Protocol):
     rng: str
     output_dir: str | Path
     input_image: str
+    tag: str

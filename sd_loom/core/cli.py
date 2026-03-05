@@ -28,25 +28,22 @@ def main(workflow_name: str, spec_name: str, overrides: tuple[str, ...],
     all_overrides = list(overrides)
     if count is not None:
         all_overrides.append(f"count={count}")
-    spec = load_spec(spec_name, overrides=tuple(all_overrides))
+    specs = load_spec(spec_name, overrides=tuple(all_overrides))
     workflow_mod = load_workflow(workflow_name)
-
     run_fn: Any = workflow_mod.run
-    results: list[LoomData] = run_fn(spec)
 
-    # Print text output.
-    for r in results:
-        if r.text is not None:
-            click.echo(r.text)
-
-    # Save images and summarize.
     from sd_loom.core.save import save_image
 
     saved: list[tuple[Any, LoomData]] = []
-    for r in results:
-        if r.image is not None:
-            path = save_image(r.image, spec, r.workflow, r.seed, r.elapsed_seconds)
-            saved.append((path, r))
+    for spec in specs:
+        results: list[LoomData] = run_fn(spec)
+
+        for r in results:
+            if r.text is not None:
+                click.echo(r.text)
+            if r.image is not None:
+                path = save_image(r.image, spec, r.workflow, r.seed, r.elapsed_seconds)
+                saved.append((path, r))
 
     if len(saved) == 1:
         path, r = saved[0]

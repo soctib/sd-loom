@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 # Map scheduler names to (k-diffusion sampler function, use_karras_sigmas).
 K_SAMPLERS: dict[str, tuple[str, bool]] = {
     "euler": ("sample_euler", False),
+    "euler_karras": ("sample_euler", True),
     "euler_a": ("sample_euler_ancestral", False),
     "dpm++_2m": ("sample_dpmpp_2m", False),
     "dpm++_2m_karras": ("sample_dpmpp_2m", True),
@@ -142,9 +143,10 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
             f"scheduler {spec.scheduler} (k-diffusion, diffusers UNet)"
         )
 
-        # Initial noise in float32 on CPU (matches A1111/Forge), then to CUDA.
-        generator = torch.Generator(device="cpu").manual_seed(seed)
-        latents = torch.randn(latent_shape, generator=generator)
+        # Initial noise — GPU matches Forge default, CPU for cross-platform reproducibility.
+        rng_device = "cpu" if spec.rng == "cpu" else "cuda"
+        generator = torch.Generator(device=rng_device).manual_seed(seed)
+        latents = torch.randn(latent_shape, device=rng_device, generator=generator)
         latents = latents.to("cuda") * sigmas[0]
 
         sampler_kwargs: dict[str, Any] = {}

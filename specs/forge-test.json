@@ -1,0 +1,17 @@
+{
+  "prompt": {
+    "positive": "1girl, solo, standing, blue sky, white dress, simple background",
+    "negative": "worst quality, bad quality, lowres"
+  },
+  "model": "boleromix_illustrious_V6.01",
+  "model_hash": "7aba508c68",
+  "width": 1024,
+  "height": 1024,
+  "steps": 20,
+  "cfg_scale": 7.0,
+  "seed": 42,
+  "scheduler": "euler_karras",
+  "clip_skip": 2,
+  "loras": [],
+  "vram": "medium"
+}

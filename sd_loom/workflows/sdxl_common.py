@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 SCHEDULERS: dict[str, tuple[type[Any], dict[str, Any]]] = {
     "euler": (EulerDiscreteScheduler, {}),
+    "euler_karras": (EulerDiscreteScheduler, {"use_karras_sigmas": True}),
     "euler_a": (EulerAncestralDiscreteScheduler, {}),
     "dpm++_2m": (DPMSolverMultistepScheduler, {}),
     "dpm++_2m_karras": (DPMSolverMultistepScheduler, {"use_karras_sigmas": True}),
@@ -104,8 +105,9 @@ def generate(
 
     for chunk_start in range(0, len(seeds), max_batch):
         chunk_seeds = seeds[chunk_start : chunk_start + max_batch]
+        rng_device = "cpu" if spec.rng == "cpu" else "cuda"
         generators = [
-            torch.Generator(device="cpu").manual_seed(s) for s in chunk_seeds
+            torch.Generator(device=rng_device).manual_seed(s) for s in chunk_seeds
         ]
 
         click.echo(

@@ -20,4 +20,5 @@ class DefaultSpec(LoomSpec):
     vae: str = ""
     loras: list[tuple[str, float]] = []
     vram: str = "low"
+    rng: str = "gpu"
     output_dir: str | Path = "outputs"

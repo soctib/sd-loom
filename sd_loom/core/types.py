@@ -27,6 +27,7 @@ class LoomSpec(BaseModel):
     vae: str
     loras: list[tuple[str, float]]
     vram: str
+    rng: str
     output_dir: str | Path
 
     @field_validator("prompt", mode="before")

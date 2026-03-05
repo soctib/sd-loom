@@ -1,4 +1,9 @@
-"""SDXL txt2img with k-diffusion sampling and ldm UNet (Forge-parity)."""
+"""SDXL txt2img with k-diffusion sampling + diffusers UNet.
+
+This is the previous sdxl workflow before switching to the ldm UNet.
+Kept for A/B comparison: same k-diffusion sampling, but uses diffusers'
+UNet2DConditionModel instead of the original ldm UNet.
+"""
 from __future__ import annotations
 
 import random
@@ -11,9 +16,7 @@ import torch
 
 from sd_loom.core.save import save_image
 from sd_loom.core.types import GenerationResult
-from sd_loom.nn.loader import load_ldm_unet
-from sd_loom.nn.unet import timestep_embedding
-from sd_loom.workflows.sdxl_common import load_pipeline, resolve_model_with_hash_fallback
+from sd_loom.workflows.sdxl_common import load_pipeline
 
 if TYPE_CHECKING:
     from sd_loom.core.protocol import SpecProtocol
@@ -34,12 +37,12 @@ K_SAMPLERS: dict[str, tuple[str, bool]] = {
 _SDE_SAMPLERS = {"sample_dpmpp_2m_sde", "sample_dpmpp_sde"}
 
 
-class _LdmUNetWrapper:
-    """Bridge ldm UNet to k-diffusion's apply_model() convention.
+class _UNetWrapper:
+    """Bridge diffusers SDXL UNet to k-diffusion's apply_model() convention.
 
     k-diffusion's CompVisDenoiser expects inner_model.apply_model(x, t, **kwargs)
-    returning the noise prediction (eps). This wrapper translates that to the
-    ldm UNet's forward(x, timesteps, context, y).
+    returning the noise prediction (eps). This wrapper translates that to
+    diffusers' UNet forward(sample, timestep, encoder_hidden_states, ...).
     """
 
     def __init__(self, unet: Any, alphas_cumprod: torch.Tensor) -> None:
@@ -49,17 +52,20 @@ class _LdmUNetWrapper:
     def apply_model(
         self, x: torch.Tensor, t: torch.Tensor, **kwargs: Any,
     ) -> torch.Tensor:
-        model_dtype = next(self.model.parameters()).dtype
+        # Cast to UNet dtype (float16) — k-diffusion math is float32 but
+        # diffusers' UNet needs matching dtypes for its internal embeddings.
+        model_dtype = self.model.dtype
         result: torch.Tensor = self.model(
             x.to(model_dtype), t,
-            context=kwargs.get("cond"),
-            y=kwargs.get("y"),
-        )
+            encoder_hidden_states=kwargs.get("cond"),
+            added_cond_kwargs=kwargs.get("added_cond_kwargs"),
+            return_dict=False,
+        )[0]
         return result.float()
 
 
 def run(spec: SpecProtocol) -> list[GenerationResult]:
-    """SDXL txt2img with k-diffusion sampling and ldm UNet."""
+    """SDXL txt2img with k-diffusion sampling + diffusers UNet."""
     if spec.scheduler not in K_SAMPLERS:
         supported = ", ".join(sorted(K_SAMPLERS))
         raise ValueError(
@@ -67,31 +73,13 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
             f"Supported: {supported}. For ddim, use sdxl_diffusers."
         )
 
-    # Load diffusers pipeline for text encoders, tokenizers, VAE, and alphas_cumprod.
     pipe, _clip_skip = load_pipeline(spec)
-
-    # Load ldm UNet directly from safetensors (bypasses diffusers conversion).
-    model_path = resolve_model_with_hash_fallback(spec)
-    click.echo("Loading ldm UNet ...")
-    ldm_unet = load_ldm_unet(model_path)
-
-    if spec.loras:
-        click.echo(
-            "Warning: LoRA weights are applied to text encoders but NOT to the ldm UNet. "
-            "UNet LoRA support for the ldm path is a follow-up task."
-        )
 
     # --- Encode prompts with compel (Forge-compatible penultimate hidden states) ---
     prompt_embeds, neg_embeds, pooled, neg_pooled = _encode_prompt(pipe, spec)
 
-    # Free the diffusers UNet — we only needed the pipeline for text encoders,
-    # VAE, tokenizers, and alphas_cumprod.
-    alphas_cumprod = pipe.scheduler.alphas_cumprod
-    del pipe.unet
-    torch.cuda.empty_cache()
-
-    # --- Build k-diffusion denoiser from ldm UNet ---
-    wrapper = _LdmUNetWrapper(ldm_unet, alphas_cumprod)
+    # --- Build k-diffusion denoiser from diffusers UNet ---
+    wrapper = _UNetWrapper(pipe.unet, pipe.scheduler.alphas_cumprod)
     denoiser: Any = K.external.CompVisDenoiser(wrapper, quantize=True)
     denoiser.to("cuda")  # moves internal sigma/log_sigma buffers
 
@@ -110,24 +98,17 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
     sampler_fn = getattr(K.sampling, sampler_name)
 
     # --- SDXL conditioning for CFG (negative first, positive second) ---
-    # Build the y vector (pooled embeds + sinusoidal micro-conditioning), Forge-style.
     cond_embeds = torch.cat([neg_embeds, prompt_embeds]).to("cuda")
-    time_values = torch.tensor(
+    add_time_ids = torch.tensor(
         [spec.height, spec.width, 0, 0, spec.height, spec.width],
-        dtype=torch.float32,
-    )
-    time_emb = torch.cat([
-        timestep_embedding(v.unsqueeze(0), 256) for v in time_values
-    ])  # [6, 256]
-    time_emb = time_emb.flatten().unsqueeze(0).repeat(2, 1)  # [2, 1536]
-    y = torch.cat([
-        torch.cat([neg_pooled, pooled]),  # [2, 1280]
-        time_emb.to(pooled),
-    ], dim=1).to("cuda")  # [2, 2816]
-
+        dtype=torch.float16, device="cuda",
+    ).unsqueeze(0).repeat(2, 1)
     extra_args: dict[str, Any] = {
         "cond": cond_embeds,
-        "y": y,
+        "added_cond_kwargs": {
+            "text_embeds": torch.cat([neg_pooled, pooled]).to("cuda"),
+            "time_ids": add_time_ids,
+        },
     }
 
     # --- CFG-handling model function for k-diffusion ---
@@ -149,8 +130,7 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
     workflow_name = __name__.split(".")[-1]
     latent_shape = (1, 4, spec.height // 8, spec.width // 8)
 
-    # Move ldm UNet to CUDA (diffusers pipeline UNet is unused for denoising).
-    ldm_unet.to("cuda")
+    pipe.unet.to("cuda")
     if spec.vram != "low":
         pipe.vae.to("cuda")
         pipe.vae.enable_tiling()
@@ -159,7 +139,7 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
         click.echo(
             f"Generating {spec.width}x{spec.height}, {spec.steps} steps, "
             f"cfg {spec.cfg_scale}, seed {seed}, "
-            f"scheduler {spec.scheduler} (k-diffusion, ldm UNet)"
+            f"scheduler {spec.scheduler} (k-diffusion, diffusers UNet)"
         )
 
         # Initial noise in float32 on CPU (matches A1111/Forge), then to CUDA.
@@ -182,7 +162,7 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
 
         # --- VAE decode (upcast to float32 to avoid NaN/black images) ---
         if spec.vram == "low":
-            ldm_unet.to("cpu")
+            pipe.unet.to("cpu")
             torch.cuda.empty_cache()
             pipe.vae.to("cuda")
             pipe.vae.enable_tiling()
@@ -202,7 +182,7 @@ def run(spec: SpecProtocol) -> list[GenerationResult]:
             pipe.vae.to("cpu")
             torch.cuda.empty_cache()
             if seed != seeds[-1]:
-                ldm_unet.to("cuda")
+                pipe.unet.to("cuda")
 
         image_path = save_image(image, spec, workflow_name, seed, elapsed)
         click.echo(f"Saved: {image_path} (seed={seed}, {elapsed:.1f}s)")

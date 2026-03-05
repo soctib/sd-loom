@@ -22,6 +22,7 @@ ml = [
     "safetensors",
     "peft",
     "compel>=2.0",
+    "einops",
 ]
 dev = [
     "mypy>=1.11",
@@ -52,6 +53,10 @@ module = [
     "safetensors.*",
     "compel",
     "compel.*",
+    "einops",
+    "einops.*",
+    "k_diffusion",
+    "k_diffusion.*",
 ]
 ignore_missing_imports = true
 

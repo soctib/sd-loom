@@ -1,9 +1,10 @@
 from sd_loom import styles
-from sd_loom.specs import DefaultSpec, lora
+from sd_loom.specs import DefaultSpec, landscape, lora
 
 
-class ExamplePrompt(DefaultSpec):
+class Example(DefaultSpec):
     prompt = styles.cinematic("woman, vision pro, skirt tug")
-    model = "illustriousRealismBy_v10VAE"
+    model = "illustriousRealism"
     seed = 1
-    loras = [lora("skirt")]
+    width, height = landscape
+    loras = [lora("skirt"), lora("vision_pro")]

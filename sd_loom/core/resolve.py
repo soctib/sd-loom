@@ -9,7 +9,13 @@ def _normalize(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
-def _resolve(name: str, search_dir: Path, label: str) -> Path:
+def _resolve(
+    name: str,
+    search_dir: Path,
+    label: str,
+    *,
+    exclude_dirs: tuple[str, ...] = (),
+) -> Path:
     """Find a file in *search_dir* matching *name*.
 
     Tries exact stem match first, then falls back to fuzzy matching
@@ -24,7 +30,13 @@ def _resolve(name: str, search_dir: Path, label: str) -> Path:
             f"your {label.lower()} files inside it."
         )
 
-    all_files = [p for p in search_dir.rglob("*") if p.is_file()]
+    excluded = {(search_dir / d).resolve() for d in exclude_dirs}
+
+    def _is_excluded(p: Path) -> bool:
+        rp = p.resolve()
+        return any(rp == ex or ex in rp.parents for ex in excluded)
+
+    all_files = [p for p in search_dir.rglob("*") if p.is_file() and not _is_excluded(p)]
 
     # Exact stem match
     exact = [p for p in all_files if p.stem == name]
@@ -54,8 +66,14 @@ def _resolve(name: str, search_dir: Path, label: str) -> Path:
 
 
 def resolve_model(name: str) -> Path:
-    """Find a model file in ``models/`` matching *name*."""
-    return _resolve(name, Path.cwd() / "models", "Models")
+    """Find a model file in ``models/`` matching *name*.
+
+    Excludes ``vae/`` and ``sdxl/lora/`` to avoid false matches.
+    """
+    return _resolve(
+        name, Path.cwd() / "models", "Models",
+        exclude_dirs=("vae", "sdxl/lora"),
+    )
 
 
 def resolve_vae(name: str) -> Path:

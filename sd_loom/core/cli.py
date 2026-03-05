@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import click
@@ -31,6 +33,8 @@ def main(workflow_name: str, spec_name: str, overrides: tuple[str, ...],
     specs = load_spec(spec_name, overrides=tuple(all_overrides))
     workflow_mod = load_workflow(workflow_name)
     run_fn: Any = workflow_mod.run
+    run_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    spec_stem = Path(spec_name).stem if "/" in spec_name or spec_name.endswith(".py") else spec_name
 
     from sd_loom.core.save import save_image
 
@@ -42,7 +46,10 @@ def main(workflow_name: str, spec_name: str, overrides: tuple[str, ...],
             if r.text is not None:
                 click.echo(r.text)
             if r.image is not None:
-                path = save_image(r.image, spec, r.workflow, r.seed, r.elapsed_seconds)
+                path = save_image(
+                    r.image, spec, r.workflow, r.seed, r.elapsed_seconds,
+                    run_timestamp=run_timestamp, spec_name=spec_stem,
+                )
                 saved.append((path, r))
 
     if len(saved) == 1:

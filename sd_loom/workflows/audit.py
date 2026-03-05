@@ -55,8 +55,14 @@ def run(spec: SpecProtocol) -> list[LoomData]:
     _check_params(spec, checks)
     _check_prompt(spec, checks)
 
-    if spec.model_hash:
-        _check_civitai(spec.model_hash, model_path, checks)
+    model_hash = spec.model_hash
+    if not model_hash and model_path is not None:
+        import click
+
+        click.echo(f"Hashing {model_path.name} for CivitAI lookup ...")
+        model_hash = _compute_autov2(model_path)
+    if model_hash:
+        _check_civitai(model_hash, spec, checks)
 
     return [LoomData(text=_format_report(spec, checks))]
 
@@ -157,9 +163,14 @@ def _check_trigger_words(
     except (json.JSONDecodeError, TypeError):
         return
 
-    # ss_tag_frequency: {"repeats_folder": {"tag": count, ...}, ...}
+    # ss_tag_frequency keys are "{repeats}_{concept}" — the concept IS the
+    # activation tag by kohya convention.
+    activation_tags: list[str] = []
     all_tags: dict[str, int] = {}
-    for dataset_tags in tag_freq.values():
+    for folder_key, dataset_tags in tag_freq.items():
+        parts = str(folder_key).split("_", 1)
+        if len(parts) == 2 and parts[0].isdigit():
+            activation_tags.append(parts[1])
         if isinstance(dataset_tags, dict):
             for tag, count in dataset_tags.items():
                 tag = str(tag).strip()
@@ -173,11 +184,13 @@ def _check_trigger_words(
                          "Top tags: " + ", ".join(f"'{t}' ({c})" for t, c in top)))
 
     prompt_lower = spec.prompt.positive.lower()
-    top_tag = top[0][0]
-    if top_tag.lower() not in prompt_lower:
-        checks.append(_Check("warn", cat,
-                             f"Most frequent training tag '{top_tag}' "
-                             f"not in prompt — may be a trigger word"))
+
+    if activation_tags:
+        missing = [t for t in activation_tags if t.lower() not in prompt_lower]
+        if missing:
+            tags_str = ", ".join(f"'{t}'" for t in missing)
+            checks.append(_Check("warn", cat,
+                                 f"Activation tag {tags_str} not in prompt"))
 
 
 def _check_vae(spec: SpecProtocol, checks: list[_Check]) -> None:
@@ -265,7 +278,7 @@ def _check_prompt(spec: SpecProtocol, checks: list[_Check]) -> None:
 
 
 def _check_civitai(
-    model_hash: str, model_path: Path | None, checks: list[_Check],
+    model_hash: str, spec: SpecProtocol, checks: list[_Check],
 ) -> None:
     civitai = _civitai_lookup(model_hash)
     if not civitai:
@@ -277,11 +290,89 @@ def _check_civitai(
     base = civitai.get("baseModel", "")
     checks.append(_Check("info", "CivitAI", f"{name} — {version} (base: {base})"))
 
-    # Surface trained words if any
     trained_words: list[str] = civitai.get("trainedWords", [])
     if trained_words:
         checks.append(_Check("info", "CivitAI",
                              "Trigger words: " + ", ".join(trained_words)))
+
+    images: list[dict[str, Any]] = civitai.get("images", [])
+    examples = [img["meta"] for img in images if img.get("meta")]
+    if examples:
+        _check_civitai_examples(examples, spec, checks)
+
+
+def _check_civitai_examples(
+    examples: list[dict[str, Any]], spec: SpecProtocol, checks: list[_Check],
+) -> None:
+    """Compare spec settings against CivitAI example-image generation params."""
+    from sd_loom.core.metadata import _a1111_sampler_to_scheduler
+
+    cat = "CivitAI"
+
+    # --- CFG ---
+    cfgs = [float(e["cfgScale"]) for e in examples if "cfgScale" in e]
+    if cfgs:
+        lo, hi = min(cfgs), max(cfgs)
+        cfg_str = str(lo) if lo == hi else f"{lo}-{hi}"
+        checks.append(_Check("info", cat, f"Examples use CFG {cfg_str}"))
+        median_cfg = sorted(cfgs)[len(cfgs) // 2]
+        if abs(spec.cfg_scale - median_cfg) > 1.5:
+            checks.append(_Check("warn", cat,
+                                 f"Spec CFG {spec.cfg_scale} differs significantly "
+                                 f"from examples ({cfg_str})"))
+
+    # --- Steps ---
+    steps = [int(e["steps"]) for e in examples if "steps" in e]
+    if steps:
+        lo, hi = min(steps), max(steps)
+        steps_str = str(lo) if lo == hi else f"{lo}-{hi}"
+        checks.append(_Check("info", cat, f"Examples use {steps_str} steps"))
+        median_steps = sorted(steps)[len(steps) // 2]
+        if spec.steps < median_steps * 0.5 or spec.steps > median_steps * 2:
+            checks.append(_Check("warn", cat,
+                                 f"Spec steps {spec.steps} differs significantly "
+                                 f"from examples ({steps_str})"))
+
+    # --- Scheduler ---
+    sched_set: set[str] = set()
+    for e in examples:
+        sampler = e.get("sampler", "")
+        schedule_type = e.get("Schedule type", "")
+        if sampler:
+            sched_set.add(_a1111_sampler_to_scheduler(sampler, schedule_type))
+    if sched_set:
+        sched_str = ", ".join(sorted(sched_set))
+        checks.append(_Check("info", cat, f"Examples use scheduler: {sched_str}"))
+        if spec.scheduler not in sched_set:
+            checks.append(_Check("warn", cat,
+                                 f"Spec scheduler '{spec.scheduler}' not used in "
+                                 f"any example ({sched_str})"))
+
+    # --- VAE ---
+    vaes: set[str] = {e["VAE"] for e in examples if e.get("VAE")}
+    if vaes:
+        vae_str = ", ".join(sorted(vaes))
+        checks.append(_Check("info", cat, f"Examples use VAE: {vae_str}"))
+        if spec.vae:
+            # Check if spec's VAE name fuzzy-matches any example VAE
+            spec_vae_lower = spec.vae.lower()
+            if not any(spec_vae_lower in v.lower() for v in vaes):
+                checks.append(_Check("info", cat,
+                                     f"Spec VAE '{spec.vae}' differs from examples"))
+        else:
+            checks.append(_Check("info", cat,
+                                 "Spec uses built-in VAE; examples use external"))
+
+
+def _compute_autov2(path: Path) -> str:
+    """Compute CivitAI AutoV2 hash (SHA256 truncated to 10 hex chars)."""
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(1 << 20):
+            h.update(chunk)
+    return h.hexdigest()[:10]
 
 
 def _civitai_lookup(model_hash: str) -> dict[str, Any] | None:
@@ -291,7 +382,7 @@ def _civitai_lookup(model_hash: str) -> dict[str, Any] | None:
     url = f"https://civitai.com/api/v1/model-versions/by-hash/{model_hash}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "sd-loom/0.1"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             result: dict[str, Any] = json.loads(resp.read())
             return result
     except Exception:

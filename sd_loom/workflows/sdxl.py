@@ -1,4 +1,4 @@
 """SDXL txt2img — alias for sdxl_ldm (k-diffusion + ldm UNet, Forge-parity)."""
-from sd_loom.workflows.sdxl_ldm import run
+from sd_loom.workflows.sdxl_ldm import SdxlLdm
 
-__all__ = ["run"]
+__all__ = ["SdxlLdm"]

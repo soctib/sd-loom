@@ -1,4 +1,4 @@
-"""Shared SDXL pipeline setup, scheduling, and generation loop."""
+"""Shared SDXL pipeline setup, scheduling, and generation."""
 from __future__ import annotations
 
 import random
@@ -21,6 +21,8 @@ from sd_loom.core.resolve import resolve_lora, resolve_model, resolve_vae
 from sd_loom.core.types import LoomData
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sd_loom.core.protocol import SpecProtocol
 
 SCHEDULERS: dict[str, tuple[type[Any], dict[str, Any]]] = {
@@ -41,117 +43,120 @@ SCHEDULERS: dict[str, tuple[type[Any], dict[str, Any]]] = {
 
 VRAM_PROFILES = ("low", "medium", "high")
 
-# Pipeline cache — reuse across consecutive specs with the same model/VAE/LoRAs.
-_pipe_cache_key: str = ""
-_pipe_cache: tuple[Any, int] | None = None
 
+class SdxlBase:
+    """Base class for SDXL workflows. Manages pipeline cache as instance state."""
+
+    def __init__(self) -> None:
+        self._pipe_cache_key: str = ""
+        self._pipe_cache: tuple[Any, int] | None = None
+
+    def _load_pipeline(self, spec: SpecProtocol) -> tuple[Any, int]:
+        """Load model, VAE, and LoRAs. Returns (pipeline, clip_skip).
+
+        Results are cached — consecutive calls with the same model/VAE/LoRAs
+        skip loading entirely.
+        """
+        key = _make_pipe_key(spec)
+        if key == self._pipe_cache_key and self._pipe_cache is not None:
+            click.echo("Reusing cached pipeline")
+            return self._pipe_cache
+
+        self._pipe_cache = None
+        self._pipe_cache_key = ""
+        torch.cuda.empty_cache()
+
+        model_path = resolve_model_with_hash_fallback(spec)
+        click.echo(f"Loading {model_path.name} ...")
+
+        pipe: Any = StableDiffusionXLPipeline.from_single_file(
+            str(model_path),
+            torch_dtype=torch.float16,
+        )
+
+        # VAE swap
+        if spec.vae:
+            from diffusers import AutoencoderKL
+
+            vae_path = resolve_vae(spec.vae)
+            click.echo(f"Loading VAE {vae_path.name} ...")
+            pipe.vae = AutoencoderKL.from_single_file(
+                str(vae_path), torch_dtype=torch.float16,
+            )
+
+        # LoRA loading
+        clip_skip = spec.clip_skip
+        if spec.loras:
+            resolved_loras = [
+                (name, resolve_lora(name), weight)
+                for name, weight in spec.loras
+            ]
+            clip_skip = resolve_clip_skip(
+                [(name, path) for name, path, _ in resolved_loras],
+                spec.clip_skip,
+            )
+            adapter_names: list[str] = []
+            adapter_weights: list[float] = []
+            for _, lora_path, weight in resolved_loras:
+                adapter_name = lora_path.stem.replace(".", "_")
+                click.echo(f"Loading LoRA {lora_path.name} (weight={weight}) ...")
+                pipe.load_lora_weights(str(lora_path), adapter_name=adapter_name)
+                adapter_names.append(adapter_name)
+                adapter_weights.append(weight)
+            pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
+
+        self._pipe_cache_key = key
+        self._pipe_cache = (pipe, clip_skip)
+        return pipe, clip_skip
+
+    def _generate(
+        self,
+        pipe: Any,
+        spec: SpecProtocol,
+        prompt_kwargs: dict[str, Any],
+        workflow_name: str,
+    ) -> Iterator[LoomData]:
+        """Apply VRAM profile, scheduler, and generate a single image."""
+        apply_vram_profile(pipe, spec.vram)
+        pipe.scheduler = make_scheduler(spec.scheduler, pipe.scheduler.config)
+
+        seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
+        rng_device = "cpu" if spec.rng == "cpu" else "cuda"
+        generator = torch.Generator(device=rng_device).manual_seed(seed)
+
+        click.echo(
+            f"Generating {spec.width}x{spec.height}, {spec.steps} steps, "
+            f"cfg {spec.cfg_scale}, seed {seed}, scheduler {spec.scheduler}"
+        )
+
+        t0 = time.perf_counter()
+        pipe_result: Any = pipe(
+            **prompt_kwargs,
+            width=spec.width,
+            height=spec.height,
+            num_inference_steps=spec.steps,
+            guidance_scale=spec.cfg_scale,
+            num_images_per_prompt=1,
+            generator=[generator],
+        )
+        elapsed = time.perf_counter() - t0
+
+        click.echo(f"Generated (seed={seed}, {elapsed:.1f}s)")
+        yield LoomData(
+            image=pipe_result.images[0],
+            seed=seed,
+            elapsed_seconds=elapsed,
+            workflow=workflow_name,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Stateless utilities (no instance state needed)
+# ---------------------------------------------------------------------------
 
 def _make_pipe_key(spec: SpecProtocol) -> str:
-    """Build a cache key from model, VAE, and LoRAs."""
     model_path = resolve_model_with_hash_fallback(spec)
     return f"{model_path}:{spec.vae}:{tuple(sorted(spec.loras))}"
-
-
-def load_pipeline(spec: SpecProtocol) -> tuple[Any, int]:
-    """Load model, VAE, and LoRAs. Returns (pipeline, clip_skip).
-
-    Results are cached — consecutive calls with the same model/VAE/LoRAs
-    skip loading entirely.
-    """
-    global _pipe_cache_key, _pipe_cache
-
-    key = _make_pipe_key(spec)
-    if key == _pipe_cache_key and _pipe_cache is not None:
-        click.echo("Reusing cached pipeline")
-        return _pipe_cache
-
-    # Clear old cache
-    _pipe_cache = None
-    _pipe_cache_key = ""
-    torch.cuda.empty_cache()
-
-    model_path = resolve_model_with_hash_fallback(spec)
-    click.echo(f"Loading {model_path.name} ...")
-
-    pipe: Any = StableDiffusionXLPipeline.from_single_file(
-        str(model_path),
-        torch_dtype=torch.float16,
-    )
-
-    # VAE swap
-    if spec.vae:
-        from diffusers import AutoencoderKL
-
-        vae_path = resolve_vae(spec.vae)
-        click.echo(f"Loading VAE {vae_path.name} ...")
-        pipe.vae = AutoencoderKL.from_single_file(
-            str(vae_path), torch_dtype=torch.float16,
-        )
-
-    # LoRA loading
-    clip_skip = spec.clip_skip
-    if spec.loras:
-        resolved_loras = [
-            (name, resolve_lora(name), weight)
-            for name, weight in spec.loras
-        ]
-        clip_skip = resolve_clip_skip(
-            [(name, path) for name, path, _ in resolved_loras],
-            spec.clip_skip,
-        )
-        adapter_names: list[str] = []
-        adapter_weights: list[float] = []
-        for _, lora_path, weight in resolved_loras:
-            adapter_name = lora_path.stem.replace(".", "_")
-            click.echo(f"Loading LoRA {lora_path.name} (weight={weight}) ...")
-            pipe.load_lora_weights(str(lora_path), adapter_name=adapter_name)
-            adapter_names.append(adapter_name)
-            adapter_weights.append(weight)
-        pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
-
-    _pipe_cache_key = key
-    _pipe_cache = (pipe, clip_skip)
-    return pipe, clip_skip
-
-
-def generate(
-    pipe: Any,
-    spec: SpecProtocol,
-    prompt_kwargs: dict[str, Any],
-    workflow_name: str,
-) -> list[LoomData]:
-    """Apply VRAM profile, scheduler, and generate a single image."""
-    apply_vram_profile(pipe, spec.vram)
-    pipe.scheduler = make_scheduler(spec.scheduler, pipe.scheduler.config)
-
-    seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)
-    rng_device = "cpu" if spec.rng == "cpu" else "cuda"
-    generator = torch.Generator(device=rng_device).manual_seed(seed)
-
-    click.echo(
-        f"Generating {spec.width}x{spec.height}, {spec.steps} steps, "
-        f"cfg {spec.cfg_scale}, seed {seed}, scheduler {spec.scheduler}"
-    )
-
-    t0 = time.perf_counter()
-    pipe_result: Any = pipe(
-        **prompt_kwargs,
-        width=spec.width,
-        height=spec.height,
-        num_inference_steps=spec.steps,
-        guidance_scale=spec.cfg_scale,
-        num_images_per_prompt=1,
-        generator=[generator],
-    )
-    elapsed = time.perf_counter() - t0
-
-    click.echo(f"Generated (seed={seed}, {elapsed:.1f}s)")
-    return [LoomData(
-        image=pipe_result.images[0],
-        seed=seed,
-        elapsed_seconds=elapsed,
-        workflow=workflow_name,
-    )]
 
 
 def resolve_clip_skip(

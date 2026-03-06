@@ -8,32 +8,38 @@ from typing import TYPE_CHECKING
 from sd_loom.core.types import LoomData
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sd_loom.core.protocol import SpecProtocol
 
 
-def run(spec: SpecProtocol) -> list[LoomData]:
+class Info:
     """Read and display metadata from spec.input_image."""
-    if not spec.input_image:
-        raise SystemExit("info workflow requires an input file (image, safetensors, or txt).")
 
-    path = Path(spec.input_image)
-    if not path.exists():
-        raise SystemExit(f"File not found: {path}")
+    def run(
+        self, spec: SpecProtocol, data: Iterator[LoomData] | None = None,
+    ) -> Iterator[LoomData]:
+        if not spec.input_image:
+            raise SystemExit("info workflow requires an input file (image, safetensors, or txt).")
 
-    if path.suffix == ".safetensors":
-        from sd_loom.core.metadata import read_safetensors_metadata
+        path = Path(spec.input_image)
+        if not path.exists():
+            raise SystemExit(f"File not found: {path}")
 
-        data = read_safetensors_metadata(path)
-    elif path.suffix == ".txt":
-        from sd_loom.core.metadata import parse_a1111
+        if path.suffix == ".safetensors":
+            from sd_loom.core.metadata import read_safetensors_metadata
 
-        data = parse_a1111(path.read_text())
-    else:
-        from sd_loom.core.metadata import read_image_metadata
+            result = read_safetensors_metadata(path)
+        elif path.suffix == ".txt":
+            from sd_loom.core.metadata import parse_a1111
 
-        try:
-            data = read_image_metadata(path)
-        except ValueError as exc:
-            raise SystemExit(str(exc)) from exc
+            result = parse_a1111(path.read_text())
+        else:
+            from sd_loom.core.metadata import read_image_metadata
 
-    return [LoomData(text=json.dumps(data, indent=2))]
+            try:
+                result = read_image_metadata(path)
+            except ValueError as exc:
+                raise SystemExit(str(exc)) from exc
+
+        yield LoomData(text=json.dumps(result, indent=2))

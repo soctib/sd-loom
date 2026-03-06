@@ -5,22 +5,24 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from sd_loom.workflows.sdxl_common import generate, load_pipeline
+from sd_loom.workflows.sdxl_common import SdxlBase
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sd_loom.core.protocol import SpecProtocol
     from sd_loom.core.types import LoomData
 
 
-def run(spec: SpecProtocol) -> list[LoomData]:
-    """SDXL txt2img with compel encoding and VRAM-aware batching."""
-    pipe, _clip_skip = load_pipeline(spec)
+class SdxlDiffusers(SdxlBase):
+    """SDXL txt2img with compel encoding and diffusers scheduler."""
 
-    # Encode prompts with compel before applying VRAM profile,
-    # since CPU offload breaks direct text encoder access.
-    prompt_kwargs = _encode_prompt(pipe, spec)
-
-    return generate(pipe, spec, prompt_kwargs, __name__.split(".")[-1])
+    def run(
+        self, spec: SpecProtocol, data: Iterator[LoomData] | None = None,
+    ) -> Iterator[LoomData]:
+        pipe, _clip_skip = self._load_pipeline(spec)
+        prompt_kwargs = _encode_prompt(pipe, spec)
+        yield from self._generate(pipe, spec, prompt_kwargs, __name__.split(".")[-1])
 
 
 def _encode_prompt(pipe: Any, spec: SpecProtocol) -> dict[str, Any]:

@@ -165,19 +165,49 @@ def load_spec(
     return instances
 
 
-def load_workflow(name_or_path: str) -> Any:
-    """Load a workflow module by name (built-in) or file path (user-contributed).
+def _find_workflow_class(module: ModuleType, name_or_path: str) -> type[Any] | None:
+    """Find a workflow class in a module (has a ``run`` method, defined in this module)."""
+    candidates = [
+        obj
+        for _, obj in inspect.getmembers(module, inspect.isclass)
+        if hasattr(obj, "run") and obj.__module__ == module.__name__
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        # Check for re-exported classes (e.g. sdxl.py re-exports SdxlLdm).
+        # If all candidates are the same class, that's fine.
+        unique = {id(c) for c in candidates}
+        if len(unique) == 1:
+            return candidates[0]
+        names = ", ".join(c.__name__ for c in candidates)
+        raise AttributeError(
+            f"Workflow module '{name_or_path}' has multiple workflow classes ({names})"
+        )
+    return None
 
-    The module must export a ``run`` callable.
+
+def load_workflow(name_or_path: str) -> Any:
+    """Load a workflow by name (built-in) or file path (user-contributed).
+
+    Returns an instantiated workflow object with a ``run`` method.
+    Supports both class-based workflows (preferred) and legacy modules
+    with a bare ``run`` function.
     """
     if _is_file_path(name_or_path):
         module = _load_module_from_file(name_or_path, "sd_loom.user_workflows")
     else:
         module = _load_builtin_module("sd_loom.workflows", name_or_path)
 
-    if not hasattr(module, "run"):
-        raise AttributeError(
-            f"Workflow module '{name_or_path}' must export a 'run' function"
-        )
+    # Prefer class-based workflows.
+    cls = _find_workflow_class(module, name_or_path)
+    if cls is not None:
+        return cls()
 
-    return module
+    # Fall back to module with a bare run() function (legacy / user workflows).
+    if hasattr(module, "run"):
+        return module
+
+    raise AttributeError(
+        f"Workflow module '{name_or_path}' must define a workflow class with a run() method"
+    )

@@ -50,8 +50,7 @@ def main(workflow_name: str, spec_name: str, overrides: tuple[str, ...],
     specs = load_spec(spec_name, overrides=overrides)
     if count is not None:
         specs = _expand_count(specs, count)
-    workflow_mod = load_workflow(workflow_name)
-    run_fn: Any = workflow_mod.run
+    workflow = load_workflow(workflow_name)
     run_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     spec_stem = Path(spec_name).stem if "/" in spec_name or spec_name.endswith(".py") else spec_name
 
@@ -59,9 +58,7 @@ def main(workflow_name: str, spec_name: str, overrides: tuple[str, ...],
 
     saved: list[tuple[Any, LoomData]] = []
     for spec in specs:
-        results: list[LoomData] = run_fn(spec)
-
-        for r in results:
+        for r in workflow.run(spec):
             if r.text is not None:
                 click.echo(r.text)
             if r.image is not None:

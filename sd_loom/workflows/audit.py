@@ -10,6 +10,7 @@ from sd_loom.core.resolve import resolve_lora, resolve_model, resolve_vae
 from sd_loom.core.types import LoomData
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
     from sd_loom.core.protocol import SpecProtocol
@@ -40,31 +41,35 @@ class _Check:
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Workflow class
 # ---------------------------------------------------------------------------
 
-def run(spec: SpecProtocol) -> list[LoomData]:
+class Audit:
     """Analyse a spec and report potential issues."""
-    checks: list[_Check] = []
 
-    model_path = _check_model(spec, checks)
-    _check_loras(spec, checks)
-    _check_vae(spec, checks)
-    _check_resolution(spec, checks)
-    _check_scheduler(spec, checks)
-    _check_params(spec, checks)
-    _check_prompt(spec, checks)
+    def run(
+        self, spec: SpecProtocol, data: Iterator[LoomData] | None = None,
+    ) -> Iterator[LoomData]:
+        checks: list[_Check] = []
 
-    model_hash = spec.model_hash
-    if not model_hash and model_path is not None:
-        import click
+        model_path = _check_model(spec, checks)
+        _check_loras(spec, checks)
+        _check_vae(spec, checks)
+        _check_resolution(spec, checks)
+        _check_scheduler(spec, checks)
+        _check_params(spec, checks)
+        _check_prompt(spec, checks)
 
-        click.echo(f"Hashing {model_path.name} for CivitAI lookup ...")
-        model_hash = _compute_autov2(model_path)
-    if model_hash:
-        _check_civitai(model_hash, spec, checks)
+        model_hash = spec.model_hash
+        if not model_hash and model_path is not None:
+            import click
 
-    return [LoomData(text=_format_report(spec, checks))]
+            click.echo(f"Hashing {model_path.name} for CivitAI lookup ...")
+            model_hash = _compute_autov2(model_path)
+        if model_hash:
+            _check_civitai(model_hash, spec, checks)
+
+        yield LoomData(text=_format_report(spec, checks))
 
 
 # ---------------------------------------------------------------------------

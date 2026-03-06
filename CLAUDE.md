@@ -5,8 +5,8 @@ Everything is Python — no JSON configs, no GUI. Users define specs and workflo
 ## Components
 
 ### `sd_loom/core/`
-- **protocol.py** — `SpecProtocol` and `Workflow` Protocols (the contracts)
-- **types.py** — `Prompt` (positive + negative text), `LoomSpec` (Pydantic BaseModel, all fields required), `GenerationResult` (dataclass)
+- **protocol.py** — `SpecProtocol` Protocol (the spec contract)
+- **types.py** — `Prompt` (positive + negative text), `LoomSpec` (Pydantic BaseModel, all fields required), `LoomData` (dataclass — carries images/text between workflow stages)
 - **loader.py** — Dual-mode loader for specs and workflows. Bare names resolve to built-ins (`sd_loom.specs.*`, `sd_loom.workflows.*`); file paths are loaded dynamically.
 - **resolve.py** — `resolve_model()`, `resolve_vae()`, `resolve_lora()` — fuzzy file resolution by name against `models/`, `models/vae/`, `models/sdxl/lora/`
 - **cli.py** — Click CLI. Entry point: `loom WORKFLOW [ARGS]` (no subcommands — everything is a workflow)
@@ -23,7 +23,7 @@ User-contributed specs. Not part of the package. `example.py` is a starting poin
 Built-in prompt styles. Each style is a callable `_Style` instance that takes a subject string and returns a `Prompt`. SAI presets (17), Fooocus (4), photography genres (7), art styles (9), model-specific quality boosters (3) — 40 styles total.
 
 ### `sd_loom/workflows/`
-Built-in workflows. Each module exports a `run()` function returning `list[GenerationResult]`. Generation workflows take `run(spec: SpecProtocol)`. Utility workflows (e.g. `info`) take other args. The CLI dispatches based on the first parameter name: `spec` → load spec, otherwise pass the raw argument. User-contributed workflows live anywhere on disk and are passed as file paths.
+Built-in workflows. Each module defines a workflow class with a `run()` method that yields `LoomData`. Signature: `run(self, spec: SpecProtocol, data: Iterator[LoomData] | None = None) -> Iterator[LoomData]`. The loader auto-discovers the workflow class and instantiates it. Class instances hold caches (e.g. pipeline, UNet). `SdxlBase` is a shared base class for SDXL workflows. User-contributed workflows live anywhere on disk and are passed as file paths.
 
 ## Resolution Rules
 - **File path** → user file: `specs/example.py` loaded dynamically

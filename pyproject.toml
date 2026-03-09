@@ -24,6 +24,9 @@ ml = [
     "compel>=2.0",
     "einops",
 ]
+gui = [
+    "gradio>=4.0",
+]
 dev = [
     "mypy>=1.11",
     "pyright>=1.1",
@@ -32,6 +35,7 @@ dev = [
 
 [project.scripts]
 loom = "sd_loom.core.cli:main"
+loom-gui = "sd_loom.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["sd_loom*"]
@@ -62,6 +66,8 @@ module = [
     "einops.*",
     "k_diffusion",
     "k_diffusion.*",
+    "gradio",
+    "gradio.*",
 ]
 ignore_missing_imports = true
 

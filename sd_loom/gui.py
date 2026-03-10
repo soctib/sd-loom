@@ -72,6 +72,27 @@ def preview_spec(spec_path: str) -> str:
         return f"Error loading spec: {exc}"
 
 
+_HISTORY_LIMIT = 200
+
+
+def _output_dir(workflow: str, spec_path: str) -> Path | None:
+    """Return the output directory for a workflow + spec combination, or None."""
+    if not workflow or not spec_path:
+        return None
+    spec_stem = Path(spec_path).stem
+    d = Path("outputs") / workflow / spec_stem
+    return d if d.is_dir() else None
+
+
+def load_history(workflow: str, spec_path: str) -> list[str]:
+    """Return the most recent image paths for a workflow + spec (newest first)."""
+    d = _output_dir(workflow, spec_path)
+    if d is None:
+        return []
+    pngs = sorted(d.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return [str(p) for p in pngs[:_HISTORY_LIMIT]]
+
+
 # ── App ────────────────────────────────────────────────────────────────────
 
 # Workflow instance cache — reused across runs, cleared on workflow switch.
@@ -226,14 +247,20 @@ def create_app() -> Any:
             enabled = bool(workflow) and bool(spec)
             return gr.Button(interactive=enabled)  # type: ignore[return-value]
 
+        def update_history(workflow: str, spec: str) -> Any:
+            history = load_history(workflow, spec)
+            return gr.Gallery(value=history, visible=bool(history))
+
         # Save selections to browser state on change.
         workflow_dd.change(_clear_workflow_cache, inputs=workflow_dd, outputs=workflow_doc)
         workflow_dd.change(update_start_btn, inputs=[workflow_dd, spec_dd], outputs=start_btn)
         workflow_dd.change(lambda v: v, inputs=workflow_dd, outputs=saved_workflow)
+        workflow_dd.change(update_history, inputs=[workflow_dd, spec_dd], outputs=output_gallery)
 
         spec_dd.change(on_spec_change, inputs=spec_dd, outputs=spec_preview)
         spec_dd.change(update_start_btn, inputs=[workflow_dd, spec_dd], outputs=start_btn)
         spec_dd.change(lambda v: v, inputs=spec_dd, outputs=saved_spec)
+        spec_dd.change(update_history, inputs=[workflow_dd, spec_dd], outputs=output_gallery)
 
         count_spinner.change(lambda v: v, inputs=count_spinner, outputs=saved_count)
 
@@ -244,6 +271,7 @@ def create_app() -> Any:
             doc = discover_workflows().get(wf, "") if wf else ""
             preview = preview_spec(sp) if sp else ""
             enabled = bool(wf) and bool(sp)
+            history = load_history(wf or "", sp or "")
             return (
                 gr.Dropdown(value=wf),
                 gr.Textbox(value=doc),
@@ -251,22 +279,24 @@ def create_app() -> Any:
                 preview,
                 gr.Number(value=cnt or 1),
                 gr.Button(interactive=enabled),
+                gr.Gallery(value=history, visible=bool(history)),
             )
 
         app.load(
             restore,
             inputs=[saved_workflow, saved_spec, saved_count],
             outputs=[workflow_dd, workflow_doc, spec_dd, spec_preview,
-                     count_spinner, start_btn],
+                     count_spinner, start_btn, output_gallery],
         )
 
         def run_and_show(
             wf: str, sp: str, cnt: int,
             progress: gr.Progress = gr.Progress(),  # noqa: B008
         ) -> tuple[str, Any]:
-            status, images = _run_generation(wf, sp, cnt, progress)
-            gallery_update = gr.Gallery(value=images, visible=bool(images))
-            return status, gallery_update
+            status, _new_images = _run_generation(wf, sp, cnt, progress)
+            # Reload history from disk (includes the just-saved images).
+            history = load_history(wf, sp)
+            return status, gr.Gallery(value=history, visible=bool(history))
 
         start_btn.click(
             run_and_show,

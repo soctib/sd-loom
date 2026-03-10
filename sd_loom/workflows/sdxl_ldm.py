@@ -61,6 +61,8 @@ class _LdmUNetWrapper:
 class SdxlLdm(SdxlBase):
     """SDXL txt2img with k-diffusion sampling and ldm UNet."""
 
+    _apply_vram_profile = False  # ldm path manages VRAM manually
+
     def __init__(self) -> None:
         super().__init__()
         self._unet_cache_key: str = ""

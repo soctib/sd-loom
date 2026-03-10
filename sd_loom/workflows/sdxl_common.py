@@ -51,6 +51,8 @@ class SdxlBase:
         self._pipe_cache_key: str = ""
         self._pipe_cache: tuple[Any, int] | None = None
 
+    _apply_vram_profile: bool = True
+
     def _load_pipeline(self, spec: SpecProtocol) -> tuple[Any, int]:
         """Load model, VAE, and LoRAs. Returns (pipeline, clip_skip).
 
@@ -105,6 +107,9 @@ class SdxlBase:
                 adapter_weights.append(weight)
             pipe.set_adapters(adapter_names, adapter_weights=adapter_weights)
 
+        if self._apply_vram_profile:
+            apply_vram_profile(pipe, spec.vram)
+
         self._pipe_cache_key = key
         self._pipe_cache = (pipe, clip_skip)
         return pipe, clip_skip
@@ -116,8 +121,7 @@ class SdxlBase:
         prompt_kwargs: dict[str, Any],
         workflow_name: str,
     ) -> Iterator[LoomData]:
-        """Apply VRAM profile, scheduler, and generate a single image."""
-        apply_vram_profile(pipe, spec.vram)
+        """Set scheduler and generate a single image."""
         pipe.scheduler = make_scheduler(spec.scheduler, pipe.scheduler.config)
 
         seed = spec.seed if spec.seed >= 0 else random.randint(0, 2**32 - 1)

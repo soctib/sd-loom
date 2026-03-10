@@ -60,6 +60,8 @@ class _UNetWrapper:
 class SdxlKdiff(SdxlBase):
     """SDXL txt2img with k-diffusion sampling + diffusers UNet."""
 
+    _apply_vram_profile = False  # k-diff path manages VRAM manually
+
     def run(
         self, spec: SpecProtocol, data: Iterator[LoomData] | None = None,
     ) -> Iterator[LoomData]:

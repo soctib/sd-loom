@@ -25,9 +25,19 @@ class SdxlDiffusers(SdxlBase):
         yield from self._generate(pipe, spec, prompt_kwargs, __name__.split(".")[-1])
 
 
+def _has_cpu_offload(pipe: Any) -> bool:
+    """Check if the pipeline has accelerate CPU offload hooks installed."""
+    return hasattr(pipe, "_all_hooks") and len(pipe._all_hooks) > 0
+
+
 def _encode_prompt(pipe: Any, spec: SpecProtocol) -> dict[str, Any]:
     """Encode prompts using compel for A1111-compatible text conditioning."""
     from compel import Compel, ReturnedEmbeddingsType
+
+    offloaded = _has_cpu_offload(pipe)
+    if offloaded:
+        # Remove hooks temporarily so we can move encoders manually.
+        pipe.remove_all_hooks()
 
     pipe.text_encoder.to("cuda")
     pipe.text_encoder_2.to("cuda")
@@ -47,6 +57,8 @@ def _encode_prompt(pipe: Any, spec: SpecProtocol) -> dict[str, Any]:
         pipe.text_encoder.to("cpu")
         pipe.text_encoder_2.to("cpu")
         torch.cuda.empty_cache()
+        if offloaded:
+            pipe.enable_model_cpu_offload()
 
     return {
         "prompt_embeds": prompt_embeds,

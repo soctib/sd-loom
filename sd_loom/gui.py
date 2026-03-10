@@ -13,7 +13,10 @@ from sd_loom.core.loader import _find_workflow_class, load_spec, load_workflow
 
 # Internal modules that aren't runnable workflows.
 _SKIP_MODULES = {"__init__", "sdxl_common"}
-_CSS = "h3 { margin: 0.75rem 0 0.5rem 0.5rem !important; }"
+_CSS = "\n".join([
+    "h3 { margin: 0.75rem 0 0.5rem 0.5rem !important; }",
+    ".spec-preview textarea { font-family: monospace !important; font-size: 0.85em !important; }",
+])
 
 # ── Discovery ──────────────────────────────────────────────────────────────
 
@@ -50,7 +53,7 @@ def discover_specs() -> list[str]:
 
 
 def preview_spec(spec_path: str) -> str:
-    """Load a spec and return its fields as formatted JSON."""
+    """Load a spec and return its fields as formatted JSON (all specs shown)."""
     if not spec_path:
         return ""
     try:
@@ -59,7 +62,11 @@ def preview_spec(spec_path: str) -> str:
             return "(empty)"
         from pydantic import BaseModel
 
-        data = specs[0].model_dump() if isinstance(specs[0], BaseModel) else vars(specs[0])
+        items = [
+            spec.model_dump() if isinstance(spec, BaseModel) else vars(spec)
+            for spec in specs
+        ]
+        data: Any = items[0] if len(items) == 1 else items
         return json.dumps(data, indent=2, default=str)
     except Exception as exc:
         return f"Error loading spec: {exc}"
@@ -74,6 +81,7 @@ _cached_workflow: tuple[str, Any] | None = None
 def _run_generation(
     workflow_name: str,
     spec_path: str,
+    count: int,
     progress: gr.Progress = gr.Progress(),  # noqa: B008
 ) -> str:
     """Run the workflow in a background thread (Gradio handles threading)."""
@@ -84,10 +92,13 @@ def _run_generation(
 
     from datetime import UTC, datetime
 
+    from sd_loom.core.cli import _expand_count
     from sd_loom.core.save import save_image
 
     try:
         specs = load_spec(spec_path)
+        if count > 1:
+            specs = _expand_count(specs, count)
         # Reuse cached workflow instance if same name (preserves model cache).
         if _cached_workflow is not None and _cached_workflow[0] == workflow_name:
             workflow = _cached_workflow[1]
@@ -142,6 +153,11 @@ def create_app() -> Any:
     spec_files = discover_specs()
 
     with gr.Blocks(title="sd-loom") as app:
+        # Browser-persisted state for selections.
+        saved_workflow = gr.BrowserState(None, storage_key="loom_workflow")
+        saved_spec = gr.BrowserState(None, storage_key="loom_spec")
+        saved_count = gr.BrowserState(1, storage_key="loom_count")
+
         gr.Markdown("# sd-loom")
 
         # ── Workflow selector ──
@@ -166,19 +182,29 @@ def create_app() -> Any:
         with gr.Group(elem_classes="group-with-padding"):
             gr.Markdown("### Spec")
             with gr.Row():
-                spec_dd = gr.Dropdown(
-                    choices=spec_files,
-                    value=None,
-                    label="Spec",
-                    interactive=True,
-                    filterable=False,
-                    scale=1,
-                )
+                with gr.Column(scale=1):
+                    spec_dd = gr.Dropdown(
+                        choices=spec_files,
+                        value=None,
+                        label="Spec",
+                        interactive=True,
+                        filterable=False,
+                    )
+                    count_spinner = gr.Number(
+                        value=1,
+                        label="Count",
+                        minimum=1,
+                        maximum=100,
+                        step=1,
+                        precision=0,
+                        interactive=True,
+                    )
                 spec_preview = gr.Textbox(
                     label="Fields",
                     interactive=False,
-                    lines=10,
+                    lines=12,
                     scale=2,
+                    elem_classes="spec-preview",
                 )
 
         # ── Start ──
@@ -193,15 +219,43 @@ def create_app() -> Any:
             enabled = bool(workflow) and bool(spec)
             return gr.Button(interactive=enabled)  # type: ignore[return-value]
 
+        # Save selections to browser state on change.
         workflow_dd.change(_clear_workflow_cache, inputs=workflow_dd, outputs=workflow_doc)
         workflow_dd.change(update_start_btn, inputs=[workflow_dd, spec_dd], outputs=start_btn)
+        workflow_dd.change(lambda v: v, inputs=workflow_dd, outputs=saved_workflow)
 
         spec_dd.change(on_spec_change, inputs=spec_dd, outputs=spec_preview)
         spec_dd.change(update_start_btn, inputs=[workflow_dd, spec_dd], outputs=start_btn)
+        spec_dd.change(lambda v: v, inputs=spec_dd, outputs=saved_spec)
+
+        count_spinner.change(lambda v: v, inputs=count_spinner, outputs=saved_count)
+
+        # Restore selections from browser state on page load.
+        def restore(
+            wf: str | None, sp: str | None, cnt: float | None,
+        ) -> tuple[Any, ...]:
+            doc = discover_workflows().get(wf, "") if wf else ""
+            preview = preview_spec(sp) if sp else ""
+            enabled = bool(wf) and bool(sp)
+            return (
+                gr.Dropdown(value=wf),
+                gr.Textbox(value=doc),
+                gr.Dropdown(value=sp),
+                preview,
+                gr.Number(value=cnt or 1),
+                gr.Button(interactive=enabled),
+            )
+
+        app.load(
+            restore,
+            inputs=[saved_workflow, saved_spec, saved_count],
+            outputs=[workflow_dd, workflow_doc, spec_dd, spec_preview,
+                     count_spinner, start_btn],
+        )
 
         start_btn.click(
             _run_generation,
-            inputs=[workflow_dd, spec_dd],
+            inputs=[workflow_dd, spec_dd, count_spinner],
             outputs=status_box,
         )
 

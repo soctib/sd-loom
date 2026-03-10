@@ -83,12 +83,12 @@ def _run_generation(
     spec_path: str,
     count: int,
     progress: gr.Progress = gr.Progress(),  # noqa: B008
-) -> str:
-    """Run the workflow in a background thread (Gradio handles threading)."""
+) -> tuple[str, list[Any]]:
+    """Run the workflow. Returns (status_text, images)."""
     global _cached_workflow  # noqa: PLW0603
 
     if not workflow_name or not spec_path:
-        return "Select both a workflow and a spec first."
+        return "Select both a workflow and a spec first.", []
 
     from datetime import UTC, datetime
 
@@ -106,12 +106,13 @@ def _run_generation(
             workflow = load_workflow(workflow_name)
             _cached_workflow = (workflow_name, workflow)
     except Exception as exc:
-        return f"Error: {exc}"
+        return f"Error: {exc}", []
 
     run_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     spec_stem = Path(spec_path).stem
 
     saved: list[str] = []
+    images: list[Any] = []
     texts: list[str] = []
     try:
         for spec in specs:
@@ -123,11 +124,13 @@ def _run_generation(
                         r.image, spec, r.workflow, r.seed, r.elapsed_seconds,
                         run_timestamp=run_timestamp, spec_name=spec_stem,
                     )
-                    saved.append(f"{path} (seed={r.seed}, {r.elapsed_seconds:.1f}s)")
+                    caption = f"seed={r.seed}, {r.elapsed_seconds:.1f}s"
+                    saved.append(f"{path} ({caption})")
+                    images.append((r.image, caption))
     except SystemExit as exc:
-        return f"Error: {exc}"
+        return f"Error: {exc}", images
     except Exception as exc:
-        return f"Error during generation: {exc}"
+        return f"Error during generation: {exc}", images
 
     parts: list[str] = []
     if texts:
@@ -135,7 +138,8 @@ def _run_generation(
     if saved:
         parts.append(f"Saved {len(saved)} image(s):")
         parts.extend(f"  {s}" for s in saved)
-    return "\n".join(parts) if parts else "Done (no output)."
+    status = "\n".join(parts) if parts else "Done (no output)."
+    return status, images
 
 
 def _clear_workflow_cache(name: str) -> dict[str, Any]:
@@ -210,6 +214,9 @@ def create_app() -> Any:
         # ── Start ──
         start_btn = gr.Button("Start", variant="primary", interactive=False)
         status_box = gr.Textbox(label="Status", interactive=False, lines=5)
+        output_gallery = gr.Gallery(
+            label="Output", columns=4, visible=False, object_fit="contain",
+        )
 
         # ── Events ──
         def on_spec_change(spec_path: str) -> str:
@@ -253,10 +260,18 @@ def create_app() -> Any:
                      count_spinner, start_btn],
         )
 
+        def run_and_show(
+            wf: str, sp: str, cnt: int,
+            progress: gr.Progress = gr.Progress(),  # noqa: B008
+        ) -> tuple[str, Any]:
+            status, images = _run_generation(wf, sp, cnt, progress)
+            gallery_update = gr.Gallery(value=images, visible=bool(images))
+            return status, gallery_update
+
         start_btn.click(
-            _run_generation,
+            run_and_show,
             inputs=[workflow_dd, spec_dd, count_spinner],
-            outputs=status_box,
+            outputs=[status_box, output_gallery],
         )
 
     return app
